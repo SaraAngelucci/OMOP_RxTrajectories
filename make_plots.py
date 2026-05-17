@@ -2,11 +2,11 @@
 make_plots.py
 =============
 
-Generate the two figures referenced in the thesis Results chapter:
+Generate two figures:
 
-* ``fig_silhouette_grid.png`` -- stratified silhouette width as a function
+* ``fig_silhouette_grid.png`` stratified silhouette width as a function
   of the candidate K-means cluster count *k* (Experiment 1).
-* ``fig_ari_heatmap.png``     -- Adjusted Rand Index heatmap for the 3x3
+* ``fig_ari_heatmap.png`` Adjusted Rand Index heatmap for the 3x3
   structural sensitivity grid (Experiment 3).
 
 Both inputs are CSV files produced by ``main.py``. They default to the
@@ -45,10 +45,8 @@ import pandas as pd
 import seaborn as sns
 
 
-# ---------------------------------------------------------------------------
-# Defaults
-# ---------------------------------------------------------------------------
 
+# Defaults
 DEFAULT_OUTPUTS_DIR = Path("outputs/synthetic")
 DEFAULT_SILHOUETTE_CSV = DEFAULT_OUTPUTS_DIR / "baseline_cohort_silhouette_grid.csv"
 DEFAULT_ARI_CSV = DEFAULT_OUTPUTS_DIR / "ari_sensitivity_matrix.csv"
@@ -59,14 +57,10 @@ THESIS_FIGURE_DIRS = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Thesis-reported values (used only when the CSV artefacts are unavailable)
-# ---------------------------------------------------------------------------
-# Optimal silhouette at k=2 is 0.6271. The thesis states that the silhouette
-# decreased monotonically for higher k within the evaluated grid. The
+# Optimal silhouette at k=2 is 0.6271, (decreased monotonically for higher k within the evaluated grid). The
 # fallback values for k=3..6 are realistic placeholders consistent with that
-# monotonic decrease; replace them by re-running ``python main.py`` and
-# letting this script read the freshly written CSV.
+# monotonic decrease; replace by re-running ``python main.py`` and letting the script read the new written CSV.
 SILHOUETTE_FALLBACK = pd.DataFrame(
     {
         "label": ["baseline_cohort"] * 5,
@@ -89,7 +83,7 @@ def _build_ari_fallback() -> pd.DataFrame:
     Construct the documented 9x9 ARI matrix from the reported values.
 
     Polypharmacy threshold is invariant (every Poly-pair ARI is 1.000). The
-    maintenance-duration ARI sub-matrix is fully specified by the thesis:
+    maintenance-duration ARI sub-matrix is fully specified in the thesis:
 
         14d <-> 14d : 1.000
         14d <-> 28d : 0.592
@@ -113,10 +107,8 @@ def _build_ari_fallback() -> pd.DataFrame:
     return pd.DataFrame(M, index=ARI_FALLBACK_LABELS, columns=ARI_FALLBACK_LABELS)
 
 
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
 
+# Plotting
 def plot_silhouette(df: pd.DataFrame, out_path: Path) -> None:
     """Render the silhouette-vs-k line plot."""
     df = df.sort_values("k")
@@ -183,10 +175,8 @@ def plot_ari_heatmap(df: pd.DataFrame, out_path: Path) -> None:
     print(f"  -> wrote {out_path}")
 
 
-# ---------------------------------------------------------------------------
-# Orchestration
-# ---------------------------------------------------------------------------
 
+# Orchestration
 def resolve_figures_dir(override: str | None) -> Path:
     """Find or create the active thesis figures directory."""
     if override:
