@@ -79,9 +79,11 @@ rsync -a --delete "${SOURCE_DIR}/config/" "${TARGET_DIR}/config/"
 # Vocabulary stub: only the small CONCEPT.csv that the tests and external
 # configs need; do NOT copy the large CSVs.
 mkdir -p "${TARGET_DIR}/synthetic_data"
-if [ -f "${SOURCE_DIR}/synthetic_data/CONCEPT.csv" ]; then
-    cp "${SOURCE_DIR}/synthetic_data/CONCEPT.csv" "${TARGET_DIR}/synthetic_data/CONCEPT.csv"
-fi
+for vocab in CONCEPT.csv concept_ancestor.csv; do
+    if [ -f "${SOURCE_DIR}/synthetic_data/${vocab}" ]; then
+        cp "${SOURCE_DIR}/synthetic_data/${vocab}" "${TARGET_DIR}/synthetic_data/${vocab}"
+    fi
+done
 
 # Notebooks (if they are not data-heavy)
 if [ -d "${SOURCE_DIR}/notebooks" ]; then

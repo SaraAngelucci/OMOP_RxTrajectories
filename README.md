@@ -28,26 +28,29 @@ This project was originally designed to integrate UK Biobank OMOP prescription d
 ```text
 .
 ├── config/                              YAML configurations (parameter sets)
-│   ├── config_synthetic.yaml            Used by main.py and tests
+│   ├── config_synthetic.yaml            Primary $N{=}1{,}000$ cohort
+│   ├── config_synthetic_50k.yaml        Scale-up cohort
+│   ├── config_external_eunomia.yaml     OHDSI GiBleed (Tier 1)
+│   ├── config_external_synthea.yaml     Synthea27Nj vignette (Tier 2a)
+│   ├── config_external_mimic.yaml       MIMIC-IV OMOP demo (Tier 2b)
 │   └── config_danish.yaml               Danish LMDB adapter configuration
-├── data/                                Pipeline output directory (git-ignored)
+├── data/                                Generated omop parquet / outputs (mostly git-ignored)
 ├── generate_synthetic_cohort.py         Medstat-calibrated synthetic OMOP generator
+├── prepare_external_omop.py             Thin OMOP CDM loader / eraisation fallback
 ├── main.py                              Three-experiment orchestrator
+├── make_plots.py                        Silhouette + ARI heatmap figures for LaTeX
+├── compute_ari_matrix.py                Standalone ARI recovery from saved grid parquets
 ├── notebooks/
 │   ├── medstat_analysis.ipynb           Population-level Medstat trend figures
 │   └── synthetic_validation_figures.ipynb
-├── requirements.txt                     Pinned dependency floor
-├── src/
-│   └── thesis_rx/
-│       ├── pipeline.py                  Core trajectory + clustering pipeline
-│       ├── utils.py                     Jaccard distance and helpers
-│       ├── config.py                    Config loader and schema validator
-│       ├── io.py                        OMOP table loaders
-│       ├── generate_synthetic_omop.py   Edge-case synthetic OMOP generator
-│       └── danish_register_adapter.py   LMDB / Receptregisteret adapter
-├── synthetic_data/                      Reference vocabulary (CONCEPT, concept_ancestor)
-└── tests/
-    └── test_validation_cohort.py        Deterministic unit-test cohort
+├── requirements.txt                     Dependency floor pins
+├── requirements.lock                    Exact pins used for thesis reproduction
+├── LICENSE                              MIT
+├── scripts/bootstrap_clean_repo.sh      Optional: scaffold a minimal public fork
+├── src/thesis_rx/                       Core pipeline package (pipeline.py, io.py, …)
+├── synthetic_data/CONCEPT.csv           Minimal OMOP vocabulary stub (names)
+├── synthetic_data/concept_ancestor.csv  Identity stub (required by ``io.load_tables``)
+└── tests/test_validation_cohort.py      Deterministic logic + edge-case suite
 ```
 
 ---
@@ -139,7 +142,7 @@ export PYTHONPATH=$(pwd)
 python tests/test_validation_cohort.py
 ```
 
-Expected output: five green "Logic Check" lines and the message `VALIDATION COMPLETE. Pipeline is theoretically sound.`
+Expected output: nine primary-cohort logic checks (stable mono, polypharmacy, restart, acute exclusion, right-censoring, cluster column typing, acute clustering exclusion, stable feature sanity, poly ordering), three edge-case checks (single-person sentinel cluster $-1$, overlapping eras, boundary-spanning eras), and the message `VALIDATION COMPLETE. Pipeline is theoretically sound.` Optionally run under pytest: `pytest tests/test_validation_cohort.py`.
 
 The same script writes Parquet artefacts to `data/validation_outputs/`, which are then consumed by `notebooks/synthetic_validation_figures.ipynb` to produce the Gantt chart shown in the thesis (`figures/synthetic_validation_gantt.png`).
 

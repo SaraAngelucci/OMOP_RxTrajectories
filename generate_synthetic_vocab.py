@@ -1,14 +1,18 @@
 """
 generate_synthetic_vocab.py
 ----------------------------
-Emit a minimal OMOP CONCEPT.csv stub that matches the ingredient_concept_id
-values used by ``generate_synthetic_cohort.py``.
+Emit minimal OMOP vocabulary stubs under ``./synthetic_data/``:
 
-This is purely a presentation aid: without it, the pipeline still runs, but
-``baseline_cohort_top_ingredients.parquet`` will contain NULL ingredient
-names instead of human-readable strings.
+* ``CONCEPT.csv`` --- ingredient (and optional RxNorm clinical-drug) rows
+  referenced by ``generate_synthetic_cohort.py``.
+* ``concept_ancestor.csv`` --- trivial identity rows (ancestor =
+  descendant) for every ``concept_id`` in ``CONCEPT.csv``.  Required because
+  ``main.py`` always loads ``concept_ancestor`` via ``src/thesis_rx/io.py``
+  before pipeline execution.
 
-Output: ./synthetic_data/CONCEPT.csv
+Without ``CONCEPT.csv``, ingredient names resolve to NULL in cluster
+summaries; without ``concept_ancestor.csv``, Spark raises ``Path does not
+exist`` on a fresh checkout.
 """
 
 from __future__ import annotations
@@ -74,11 +78,40 @@ def write_concept_csv(rows: list[tuple[int, str]], out_path: Path) -> None:
             ])
 
 
+def write_concept_ancestor_identity(concept_csv: Path, out_path: Path) -> None:
+    """Write one OMOP-style self-ancestor row per concept_id in CONCEPT.csv."""
+    concept_ids: list[int] = []
+    with concept_csv.open(newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            cid = row.get("concept_id")
+            if cid is None or cid == "":
+                continue
+            concept_ids.append(int(cid))
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    columns = [
+        "ancestor_concept_id",
+        "descendant_concept_id",
+        "min_levels_of_separation",
+        "max_levels_of_separation",
+    ]
+    with out_path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(columns)
+        for cid in concept_ids:
+            writer.writerow([cid, cid, 0, 0])
+
+
 def main() -> None:
-    out_path = Path("synthetic_data") / "CONCEPT.csv"
+    out_dir = Path("synthetic_data")
+    out_path = out_dir / "CONCEPT.csv"
     rows = collect_ingredient_concepts()
     write_concept_csv(rows, out_path)
+    ancestor_path = out_dir / "concept_ancestor.csv"
+    write_concept_ancestor_identity(out_path, ancestor_path)
     print(f"Wrote {len(rows)} ingredient concepts to {out_path}")
+    print(f"Wrote identity ancestor rows for all concepts to {ancestor_path}")
     for cid, cname in rows:
         print(f"  {cid}\t{cname}")
 
