@@ -6,8 +6,6 @@
 
 ---
 
-## Overview
-
 This repository contains the complete computational architecture and reproducible PySpark pipeline developed for my Master's thesis. The pipeline is **drug-agnostic** and operates entirely on tables defined by the Observational Medical Outcomes Partnership (OMOP) Common Data Model. It transforms raw, fragmented drug exposure records into:
 
 1. continuous ingredient-level **drug eras**;
@@ -17,9 +15,8 @@ This repository contains the complete computational architecture and reproducibl
 5. **maintenance-aware discontinuation events** (early drop-off, restart within 180 days, switch within 60 days);
 6. rule-based **discontinuation phenotypes** and an unsupervised **K-means** trajectory clustering, evaluated with a **stratified silhouette** estimator.
 
-### Project pivot
 
-This project was originally designed to integrate UK Biobank OMOP prescription data with pharmacogenomic variation. Late in the project timeline, access to the secure UK Biobank Research Analysis Platform was unexpectedly revoked. The thesis was therefore refocused on the **methodological development and rigorous validation of the underlying phenotyping framework**, executed on a Medstat-calibrated synthetic cohort. Because the pipeline is implemented strictly against OMOP-standard inputs, the *same* code is supposed to be portable to UK Biobank, NIH *All of Us*, and OMOP-mapped Danish National Registers without modification (see `src/thesis_rx/danish_register_adapter.py`).
+The project was originally designed to integrate UK Biobank OMOP prescription data with pharmacogenomic variation. Late in the project timeline, access to the secure UK Biobank Research Analysis Platform was unexpectedly revoked. The thesis was therefore refocused on the **methodological development and rigorous validation of the underlying phenotyping framework**, executed on a Medstat-calibrated synthetic cohort. Because the pipeline is implemented strictly against OMOP-standard inputs, the *same* code is supposed to be portable to UK Biobank, NIH *All of Us*, and OMOP-mapped Danish National Registers without modification (see `src/thesis_rx/danish_register_adapter.py`).
 
 ---
 
