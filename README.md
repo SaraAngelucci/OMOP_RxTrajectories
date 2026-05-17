@@ -11,7 +11,7 @@
 This repository contains the complete computational architecture and reproducible PySpark pipeline developed for my Master's thesis. The pipeline is **drug-agnostic** and operates entirely on tables defined by the Observational Medical Outcomes Partnership (OMOP) Common Data Model. It transforms raw, fragmented drug exposure records into:
 
 1. continuous ingredient-level **drug eras**;
-2. a strict **monthly person-time grid** with active-ingredient burden, starts, stops, and Jaccard turnover;
+2. a **monthly person-time grid** with active-ingredient burden, starts, stops, and Jaccard turnover;
 3. mutually exclusive **monthly prescribing states** (e.g. `StableMono`, `StablePolypharmacy`, `HighTurnover`);
 4. four temporally ordered **sub-window features** that preserve trajectory shape under K-means clustering;
 5. **maintenance-aware discontinuation events** (early drop-off, restart within 180 days, switch within 60 days);
@@ -19,7 +19,7 @@ This repository contains the complete computational architecture and reproducibl
 
 ### Project pivot
 
-This project was originally designed to integrate UK Biobank OMOP prescription data with pharmacogenomic variation. Late in the project timeline, access to the secure UK Biobank Research Analysis Platform was unexpectedly revoked. The thesis was therefore strategically refocused on the **methodological development and rigorous validation of the underlying phenotyping framework**, executed on a Medstat-calibrated synthetic cohort. Because the pipeline is implemented strictly against OMOP-standard inputs, the *same* code is portable to UK Biobank, NIH *All of Us*, and OMOP-mapped Danish National Registers without modification (see `src/thesis_rx/danish_register_adapter.py` for the corresponding non-OMOP ATC adapter).
+This project was originally designed to integrate UK Biobank OMOP prescription data with pharmacogenomic variation. Late in the project timeline, access to the secure UK Biobank Research Analysis Platform was unexpectedly revoked. The thesis was therefore refocused on the **methodological development and rigorous validation of the underlying phenotyping framework**, executed on a Medstat-calibrated synthetic cohort. Because the pipeline is implemented strictly against OMOP-standard inputs, the *same* code is supposed to be portable to UK Biobank, NIH *All of Us*, and OMOP-mapped Danish National Registers without modification (see `src/thesis_rx/danish_register_adapter.py`).
 
 ---
 
@@ -28,7 +28,7 @@ This project was originally designed to integrate UK Biobank OMOP prescription d
 ```text
 .
 ├── config/                              YAML configurations (parameter sets)
-│   ├── config_synthetic.yaml            Primary $N{=}1{,}000$ cohort
+│   ├── config_synthetic.yaml            Primary $N{=}1{.}000$ cohort
 │   ├── config_synthetic_50k.yaml        Scale-up cohort
 │   ├── config_external_eunomia.yaml     OHDSI GiBleed (Tier 1)
 │   ├── config_external_synthea.yaml     Synthea27Nj vignette (Tier 2a)
@@ -46,7 +46,6 @@ This project was originally designed to integrate UK Biobank OMOP prescription d
 ├── requirements.txt                     Dependency floor pins
 ├── requirements.lock                    Exact pins used for thesis reproduction
 ├── LICENSE                              MIT
-├── scripts/bootstrap_clean_repo.sh      Optional: scaffold a minimal public fork
 ├── src/thesis_rx/                       Core pipeline package (pipeline.py, io.py, …)
 ├── synthetic_data/CONCEPT.csv           Minimal OMOP vocabulary stub (names)
 ├── synthetic_data/concept_ancestor.csv  Identity stub (required by ``io.load_tables``)
@@ -67,20 +66,18 @@ python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 
-# For day-to-day use:
+# For normal use:
 pip install -r requirements.txt
 
 # For exact reproducibility of the thesis numbers:
 pip install -r requirements.lock
 ```
 
-`scikit-learn` is included in both files (required for the Adjusted Rand Index in Experiment 3).
-
 ---
 
 ## 2. Generate the synthetic Medstat-calibrated cohort
 
-The thesis results are produced on a 1,000-patient synthetic OMOP cohort whose archetype prevalences are mathematically calibrated to Danish primary-care prescribing frequencies derived from the Medstat register (Chapter 2 of the thesis).
+The thesis results are produced on a 1.000-patient synthetic OMOP cohort whose archetype prevalences are mathematically calibrated to Danish primary-care prescribing frequencies derived from the Medstat register. (It is then reproduced with 50.000 patients)
 
 ```bash
 python generate_synthetic_cohort.py --n_patients 1000 --seed 42 \
@@ -121,7 +118,7 @@ SPARK_DRIVER_MEMORY=8g SPARK_SHUFFLE_PARTITIONS=50 \
 GRID_FIXED_K=2 ./.venv/bin/python -u main.py
 ```
 
-Silhouette is **never skipped** on the baseline (Experiment 1). To re-evaluate silhouette **inside each grid cell** (≈9× clustering cost):
+Silhouette is **never skipped** on the baseline (Experiment 1). To re-evaluate silhouette **inside each grid cell** (≈9× clustering cost, and time):
 
 ```bash
 GRID_SILHOUETTE_IN_GRID=1 ./.venv/bin/python main.py
@@ -144,7 +141,7 @@ python tests/test_validation_cohort.py
 
 Expected output: nine primary-cohort logic checks (stable mono, polypharmacy, restart, acute exclusion, right-censoring, cluster column typing, acute clustering exclusion, stable feature sanity, poly ordering), three edge-case checks (single-person sentinel cluster $-1$, overlapping eras, boundary-spanning eras), and the message `VALIDATION COMPLETE. Pipeline is theoretically sound.` Optionally run under pytest: `pytest tests/test_validation_cohort.py`.
 
-The same script writes Parquet artefacts to `data/validation_outputs/`, which are then consumed by `notebooks/synthetic_validation_figures.ipynb` to produce the Gantt chart shown in the thesis (`figures/synthetic_validation_gantt.png`).
+The same script writes Parquet artefacts to `data/validation_outputs/`, which are then used by `notebooks/synthetic_validation_figures.ipynb` to produce the Gantt chart (`figures/synthetic_validation_gantt.png`).
 
 ---
 
@@ -165,15 +162,15 @@ ICB/OMOP/maps/athena_omop/CONCEPT.csv
 ICB/OMOP/maps/athena_omop/concept_ancestor.csv
 ```
 
-No code changes are required. The pipeline already handles UK Biobank-specific quirks such as `eid` → `person_id` harmonisation, duplicate death records, and British date formatting (see `src/thesis_rx/io.py`).
+No code changes are required. The pipeline shoould be able to handle UK Biobank-specific particularities such as `eid` → `person_id` harmonisation, duplicate death records, and British date formatting (see `src/thesis_rx/io.py`).
 
 ### Danish National Prescription Register (Receptregisteret / LMDB)
 
-For Danish register data, which is ATC-coded rather than OMOP-mapped, the helper `src/thesis_rx/danish_register_adapter.py` converts LMDB extracts into the same intermediate era schema consumed by `run_trajectory_pipeline`. A worked example is shown in the module docstring.
+For Danish register data, which is ATC-coded rather than OMOP-mapped, the helper `src/thesis_rx/danish_register_adapter.py` should convert LMDB extracts into the same intermediate era schema consumed by `run_trajectory_pipeline`.
 
 ### NIH *All of Us* Research Program
 
-The OMOP CDM is the canonical schema in *All of Us*. The pipeline can be executed there by changing input paths in `config/config.yaml`; no code changes are required.
+The OMOP CDM is the canonical schema in *All of Us*. The pipeline should be able to be executed there by changing input paths in `config/config.yaml`; no code changes are required.
 
 ---
 
@@ -211,7 +208,7 @@ All analytic parameters are externalised in YAML (`config/config_synthetic.yaml`
 
 ## Citation
 
-If you use this code in academic work, please cite the thesis and this repository (`CITATION.cff`).
+If you use this code in academic work, please cite this repository (`CITATION.cff`).
 
 ## Licence
 
