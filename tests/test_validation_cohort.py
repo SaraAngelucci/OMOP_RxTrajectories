@@ -9,16 +9,16 @@ The suite executes two complementary blocks:
 1. ``run_primary_cohort_assertions`` builds a five-patient cohort that
    encodes the principal clinical edge cases (stable monotherapy,
    escalating polypharmacy, intermittent stop--start, acute exposure,
-   right-censored drop-off) and asserts that the pipeline assigns the
+   right-censored drop-off) and checks  that the pipeline assigns the
    expected discontinuation phenotype labels, the expected
    ``trajectory_cluster`` membership, and the expected per-feature values
    for each archetype.
 
 2. ``run_edge_case_assertions`` runs three small additional cohorts that
    exercise pathological inputs:
-       (i)   a one-patient cohort (cannot K-means cluster);
-       (ii)  a two-patient cohort with overlapping ingredient eras;
-       (iii) a two-patient cohort whose eras straddle the
+       1.   a one-patient cohort (cannot K-means cluster);
+       2. a two-patient cohort with overlapping ingredient eras;
+       3. a two-patient cohort whose eras straddle the
               observation-period boundary.
    Each block verifies that the pipeline degrades safely and writes
    well-formed artefacts.
@@ -97,29 +97,29 @@ def run_automated_assertions(results):
     person_phenos = results["final_person"].toPandas().set_index("person_id")
     era_events = results["era_events"].toPandas()
 
-    # TEST 1: Stable Monotherapy
+    #TEST 1: Stable Monotherapy
     assert person_phenos.loc[1, 'discontinuation_phenotype'] == "Persistent stable use", "FAIL: Patient 1 should be Stable Mono."
     print("Logic Check 1 (Stable Monotherapy): PASSED")
 
-    # TEST 2: Escalating Polypharmacy Threshold
+    #TEST 2: Escalating Polypharmacy Threshold
     assert person_phenos.loc[2, 'poly_month_prop'] > 0, "FAIL: Patient 2 did not trigger polypharmacy threshold."
     print("Logic Check 2 (Polypharmacy Detection): PASSED")
 
-    # TEST 3: Restart Detection (Stop-Start)
+    #TEST 3: Restart Detection (Stop-Start)
     assert person_phenos.loc[3, 'restart_180_rate'] > 0, f"FAIL: Patient 3 restart not detected. Actual rate: {person_phenos.loc[3, 'restart_180_rate']}"
     print("Logic Check 3 (Restart 180d Window): PASSED")
 
-    # TEST 4: Maintenance-Aware Logic (Acute Exclusion)
+    #TEST 4: Maintenance-Aware Logic (Acute Exclusion)
     assert person_phenos.loc[4, 'disc_evaluable'] == False, "FAIL: Patient 4 (Acute 7-day) was improperly evaluated as maintenance."
     print("Logic Check 4 (Acute Exposure Filtering): PASSED")
 
-    # TEST 5: Right-Censoring Bias Check
+    #TEST 5: Right-Censoring Bias Check
     events_pt5 = era_events[era_events['person_id'] == 5].iloc[0]
     assert events_pt5['observed_for_restart_window'] == 0, "FAIL: Patient 5 was not properly right-censored."
     print("Logic Check 5 (Right-Censoring Handling): PASSED")
 
-    # ---- Additional assertions on cluster assignment and feature values ----
-    # TEST 6: Trajectory cluster column exists, is integer-typed, and is finite
+    # Additional assertions on cluster assignment and feature values 
+    #TEST 6: Trajectory cluster column exists, is integer-typed, and is finite
     assert "trajectory_cluster" in person_phenos.columns, (
         "FAIL: trajectory_cluster column missing from final_person output."
     )
@@ -129,7 +129,7 @@ def run_automated_assertions(results):
     )
     print("Logic Check 6 (Cluster column present and integer-typed): PASSED")
 
-    # TEST 7: Patient 4 (acute) and Patient 5 (right-censored) should NOT be
+    #TEST 7: Patient 4 (acute) and Patient 5 (right-censored) should NOT be
     # in the same maintenance-evaluable subset; clustering should not place
     # them in the same partition as Patient 1 (a clean stable case).
     p1_cluster = person_phenos.loc[1, "trajectory_cluster"]
@@ -140,7 +140,7 @@ def run_automated_assertions(results):
     )
     print("Logic Check 7 (Acute patient excluded from clustering): PASSED")
 
-    # TEST 8: Feature values for the stable monotherapy patient are sane:
+    #TEST 8: Feature values for the stable monotherapy patient are sane:
     # non-zero number of ingredient eras and a non-trivial median era duration.
     p1_n_eras = int(person_phenos.loc[1, "n_ingredient_eras"])
     p1_median_era = float(person_phenos.loc[1, "median_era_days"])
@@ -151,7 +151,7 @@ def run_automated_assertions(results):
     )
     print("Logic Check 8 (Stable-monotherapy feature values plausible): PASSED")
 
-    # TEST 9: Patient 2 (5-drug polypharmacy) has strictly more distinct
+    #TEST 9: Patient 2 (5-drug polypharmacy) has strictly more distinct
     # ingredients than Patient 1 (monotherapy).
     p1_distinct = int(person_phenos.loc[1, "n_distinct_ingredients"])
     p2_distinct = int(person_phenos.loc[2, "n_distinct_ingredients"])
@@ -161,7 +161,7 @@ def run_automated_assertions(results):
     )
     print("Logic Check 9 (Polypharmacy distinct-ingredient ordering): PASSED")
 
-    print("\n--- 9 primary-cohort assertions passed. ---")
+    print("\n 9 primary-cohort assertions passed.")
     _ = p1_cluster  # silence linter; cluster id is implementation-detail
 
 def export_for_thesis(results, output_dir="data/validation_outputs"):
@@ -200,7 +200,7 @@ def run_edge_case_assertions(spark, cfg, concepts_df, death_df):
     print("EDGE-CASE COHORTS (safe-failure contract)")
     print("=" * 50)
 
-    # ---- Edge 1: single-patient cohort ----
+    #  Edge 1: single-patient cohort
     eras_1 = [
         (1001, 101, datetime.date(2020, 1, 1), datetime.date(2021, 12, 31), 1, 0),
     ]
@@ -223,7 +223,7 @@ def run_edge_case_assertions(spark, cfg, concepts_df, death_df):
     )
     print("Edge Check 1 (single-patient cohort -> sentinel cluster -1): PASSED")
 
-    # ---- Edge 2: overlapping eras (same ingredient, overlapping windows) ----
+    # Edge 2: overlapping eras (same ingredient, overlapping windows) 
     eras_2 = [
         (2001, 201, datetime.date(2020, 1, 1), datetime.date(2020, 6, 30), 1, 0),
         (2001, 201, datetime.date(2020, 5, 1), datetime.date(2020, 9, 30), 1, 0),
@@ -248,7 +248,7 @@ def run_edge_case_assertions(spark, cfg, concepts_df, death_df):
     )
     print("Edge Check 2 (overlapping eras handled without crash): PASSED")
 
-    # ---- Edge 3: eras straddling the observation-period boundary ----
+    # Edge 3: eras straddling the observation-period boundary 
     eras_3 = [
         # Era starts inside follow-up window, ends just after observation_period_end.
         (3001, 301, datetime.date(2020, 1, 1), datetime.date(2023, 6, 30), 1, 0),
