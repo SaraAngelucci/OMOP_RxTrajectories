@@ -1,19 +1,17 @@
 """
 prepare_external_omop.py
 ------------------------
-Ingest an external OMOP CDM v5.x dataset (Eunomia, Synthea-OMOP, or any
+Takes external OMOP CDM v5.x dataset (Eunomia, Synthea-OMOP, or any
 other OMOP-compatible source) and convert it to the parquet schema
-consumed by ``main.py``.
+for ``main.py``.
 
-This is the on-ramp for Tier 1 (Eunomia) and Tier 2 (Synthea-OMOP)
-external validation runs.  The pipeline itself requires no changes; we
-only need to harmonise the input table layout.
+The pipeline itself requires no changes; only need to harmonise the input table layout.
 
 Expected input directory contents (CSV or Parquet):
-    DRUG_ERA.csv             (required) -- OMOP drug_era table
-    OBSERVATION_PERIOD.csv   (required) -- OMOP observation_period table
-    PERSON.csv               (optional) -- OMOP person table (for demographics)
-    CONCEPT.csv              (optional) -- for human-readable ingredient names
+    DRUG_ERA.csv             (required)  OMOP drug_era table
+    OBSERVATION_PERIOD.csv   (required)  OMOP observation_period table
+    PERSON.csv               (optional)  OMOP person table (for demographics)
+    CONCEPT.csv              (optional)  for human-readable ingredient names
 
 Outputs (written to --output-dir, default data/external_omop_<label>/):
     synthetic_drug_era.parquet
@@ -25,13 +23,13 @@ the new files, so the existing ``main.py`` can run unchanged via:
     SPARK_CONFIG_PATH=config/config_external_<label>.yaml python main.py
 
 Usage:
-    # Tier 1 -- Eunomia (after SQLite has been extracted to CSV)
+    # Tier 1  Eunomia (after SQLite has been extracted to CSV)
     python prepare_external_omop.py \\
         --input-dir ~/Downloads/Eunomia_csv \\
         --label eunomia \\
         --format csv
 
-    # Tier 2 -- Synthea-OMOP (CSV downloads from ftp.ohdsi.org)
+    # Tier 2  Synthea-OMOP (CSV downloads from ftp.ohdsi.org)
     python prepare_external_omop.py \\
         --input-dir ~/Downloads/synthea_omop \\
         --label synthea \\
@@ -48,8 +46,8 @@ from pathlib import Path
 import pandas as pd
 
 
-# OMOP DRUG_ERA columns we expect in the source.  CDM v5.3 and v5.4 are
-# both supported because the columns we read are stable across versions.
+# OMOP DRUG_ERA columns expected in the source.  CDM v5.3 and v5.4 are
+# both supported because the columns read are stable across versions.
 DRUG_ERA_REQUIRED = [
     "person_id",
     "drug_concept_id",
@@ -57,7 +55,7 @@ DRUG_ERA_REQUIRED = [
     "drug_era_end_date",
 ]
 
-# Optional columns we map if present; otherwise we synthesize a default.
+# Optional columns to map if present; otherwise synthesize a default.
 DRUG_ERA_OPTIONAL = {
     "drug_exposure_count": 1,
     "gap_days": 0,
@@ -132,22 +130,19 @@ def eraize_from_drug_exposure(input_dir: Path, fmt: str, gap_days: int = 30) -> 
     """Synthesise DRUG_ERA rows from DRUG_EXPOSURE.
 
     Defensive fallback for OMOP CDM distributions that ship without a
-    pre-computed DRUG_ERA table (notably OHDSI's ``Synthea27Nj_5.4``
-    demo, which carries DRUG_EXPOSURE but an empty DRUG_ERA).  We
+    pre-computed DRUG_ERA table ( OHDSI's ``Synthea27Nj_5.4``
+    demo, which carries DRUG_EXPOSURE but an empty DRUG_ERA).
     implement the standard OHDSI gap-rule eraization: rows with identical
     ``(person_id, drug_concept_id)`` are sorted by start date and
     merged into a single era whenever the gap between the previous era's
     end and the next exposure's start does not exceed ``gap_days``
     (default 30 days, the OHDSI canonical value).
 
-    Note: we treat ``drug_exposure.drug_concept_id`` as the era-level
-    ingredient.  Strictly speaking, OMOP CDM v5.x expects DRUG_ERA's
+    Note:  ``drug_exposure.drug_concept_id`` treated as the era-level
+    ingredient. OMOP CDM v5.x expects DRUG_ERA's
     drug_concept_id to be the ingredient concept obtained by ascending
     CONCEPT_ANCESTOR; pre-shipped DRUG_ERA tables (e.g. Eunomia
-    GiBleed) do exactly that.  Our fallback is therefore a coarse but
-    deterministic eraization suitable for demonstrating the pipeline's
-    ingestion of CDMs that ship sparse, but it is not a replacement
-    for a proper Achilles/ETL-Synthea eraization run.
+    GiBleed) do that.  but it is not a replacement for a proper Achilles/ETL-Synthea eraization run.
     """
     path = find_table(input_dir, "drug_exposure", fmt)
     if path is None:
@@ -202,7 +197,7 @@ def eraize_from_drug_exposure(input_dir: Path, fmt: str, gap_days: int = 30) -> 
 
 
 def load_drug_era(input_dir: Path, fmt: str) -> pd.DataFrame:
-    """Load OMOP DRUG_ERA and project to our pipeline-compatible schema.
+    """Load OMOP DRUG_ERA and project to pipeline-compatible schema.
 
     If DRUG_ERA is missing or empty (header-only), automatically falls
     back to eraising from DRUG_EXPOSURE using the OHDSI 30-day gap rule
