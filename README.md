@@ -6,7 +6,7 @@
 
 ---
 
-This repository contains the complete computational architecture and reproducible PySpark pipeline developed for my Master's thesis. The pipeline is **drug-agnostic** and operates entirely on tables defined by the Observational Medical Outcomes Partnership (OMOP) Common Data Model. It transforms raw, fragmented drug exposure records into:
+This repository contains a reproducible PySpark pipeline developed for my Master's thesis. The pipeline is **drug-agnostic** and operates entirely on tables defined by the Observational Medical Outcomes Partnership (OMOP) Common Data Model. It transforms raw, fragmented drug exposure records into:
 
 1. continuous ingredient-level **drug eras**;
 2. a **monthly person-time grid** with active-ingredient burden, starts, stops, and Jaccard turnover;
