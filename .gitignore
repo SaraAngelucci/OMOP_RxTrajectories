@@ -16,7 +16,7 @@ data/synthetic_medstat/
 data/validation_outputs/
 data/synthetic_omop/
 
-# Large data artefacts (never commit these)
+# Large data artefacts (not to commit)
 *.parquet
 *.csv.gz
 *.h5
@@ -43,7 +43,7 @@ venv/
 # Logs
 *.log
 
-# LaTeX build artefacts (if anyone ever compiles locally)
+# LaTeX 
 *.aux
 *.bbl
 *.bcf
@@ -56,7 +56,3 @@ venv/
 *.lof
 *.lot
 *.run.xml
-
-# Thesis manuscript (maintained on Overleaf, not tracked on GitHub)
-Angelucci_draft_thesis/
-NEWAngelucci_draft_thesis/
