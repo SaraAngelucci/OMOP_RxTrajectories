@@ -2,7 +2,7 @@
 generate_synthetic_cohort.py
 -----------------------------
 Generates a 500-patient OMOP-compatible synthetic cohort calibrated to the
-Danish Medstat distributions from Chapter 2 of the thesis.
+Danish Medstat distributions.
 
 Usage:
     python generate_synthetic_cohort.py --n_patients 500 --seed 42
@@ -26,9 +26,7 @@ import numpy as np
 
 
 # ---------------------------------------------------------------------------
-# Medstat-calibrated drug distributions (from Chapter 2, Table 2.2)
-# These are approximate individual-level parameters derived from the
-# population-level Medstat statistics using published persistence data.
+# Medstat-calibrated drug distributions are approximate individual-level parameters derived from the population-level Medstat statistics using published persistence data.
 # ---------------------------------------------------------------------------
 
 # Format: {archetype_name: {
@@ -43,13 +41,13 @@ import numpy as np
 # Antidepressants (N06A): ~11% of women, ~7% of men use in any year.
 # Published persistence data (Garnock-Jones 2010, Hermansen 2018):
 #   ~50% discontinue within 3 months, ~30% persist >1 year.
-# We model this as a mixture:
+# Model this s a mixture:
 #   - "Persistent stable" (30%): 1 era, 300–720 days
 #   - "Early drop-off" (35%): 1 era, 14–90 days, no restart
 #   - "Intermittent" (35%): 2–4 eras, 60–180 days each, 30–120 day gaps
 
 DRUG_ARCHETYPES = {
-    # ----- Antidepressants (N06A) -----
+    # Antidepressants (N06A) 
     "N06A_persistent": {
         "prevalence": 0.09,    # ~9% of cohort
         "n_eras": (1, 1),
@@ -77,7 +75,7 @@ DRUG_ARCHETYPES = {
         "concept_id": 700001,
         "concept_name": "sertraline",
     },
-    # ----- Antipsychotics (N05A) -----
+    # Antipsychotics (N05A)
     "N05A_stable": {
         "prevalence": 0.03,
         "n_eras": (1, 1),
@@ -96,7 +94,7 @@ DRUG_ARCHETYPES = {
         "concept_id": 700011,
         "concept_name": "risperidone",
     },
-    # ----- Anxiolytics (N05B): declining since 2000, ~2% prevalence -----
+    # Anxiolytics (N05B)
     "N05B_acute": {
         "prevalence": 0.04,
         "n_eras": (1, 2),
@@ -106,7 +104,7 @@ DRUG_ARCHETYPES = {
         "concept_id": 700020,
         "concept_name": "diazepam",
     },
-    # ----- Hypnotics (N05C): post-2020 rebound -----
+    #  Hypnotics (N05C)
     "N05C_intermittent": {
         "prevalence": 0.05,
         "n_eras": (1, 3),
@@ -116,7 +114,7 @@ DRUG_ARCHETYPES = {
         "concept_id": 700030,
         "concept_name": "zolpidem",
     },
-    # ----- Polypharmacy: psychiatric + somatic combination -----
+    # Polypharmacy: psychiatric + somatic combination 
     # Models patients who escalate to polypharmacy (N06A + N05A + somatic)
     "polypharmacy_escalating": {
         "prevalence": 0.06,
@@ -133,7 +131,7 @@ DRUG_ARCHETYPES = {
              "start_offset_days": (0, 60), "era_duration_days": (270, 730)},
         ],
     },
-    # ----- Acute-only (negative control for maintenance logic) -----
+    #Acute-only (negative control for maintenance logic) 
     "acute_antibiotic": {
         "prevalence": 0.15,
         "n_eras": (1, 3),
@@ -143,7 +141,7 @@ DRUG_ARCHETYPES = {
         "concept_id": 700050,
         "concept_name": "amoxicillin",
     },
-    # ----- No psychiatric medication (baseline) -----
+    #  No psychiatric medication (baseline) 
     "no_psychiatric_rx": {
         "prevalence": 0.35,
         "n_eras": (0, 0),
