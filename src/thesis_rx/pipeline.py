@@ -9,36 +9,28 @@ Core PySpark pipeline for the Master's thesis
 
 The module implements four conceptual stages:
 
-1.  **Cohort eligibility** -- selecting persons with sufficient pre-index
+1.  Cohort eligibility: selecting persons with sufficient pre-index
     observation time and a valid follow-up window
     (:func:`build_eligible_from_eras`).
-2.  **Era construction** -- using the OMOP ``drug_era`` table directly
+2.  Era construction: using the OMOP ``drug_era`` table directly
     (:func:`build_primary_eras`) or reconstructing ingredient eras from
     ``drug_exposure`` and ``concept_ancestor``
     (:func:`build_exposure_derived_eras`).
-3.  **Trajectory phenotyping** -- monthly active-ingredient burden, Jaccard
+3.  Trajectory phenotyping: monthly active-ingredient burden, Jaccard
     turnover, rule-based prescribing states, sub-window features,
     maintenance-aware discontinuation events, and rule-based discontinuation
     phenotypes (:func:`run_trajectory_pipeline`).
-4.  **Unsupervised clustering** -- K-means on the standardised feature vector
+4.  Unsupervised clustering: K-means on the standardised feature vector
     with a stratified silhouette evaluator and cluster-level aggregation of
     the most prescribed ingredients.
-
-Engineering notes
------------------
-* All wide joins (era-to-month overlap, switch detection, restart detection)
-  are written as **range-filter joins on UNIX timestamps** rather than as
-  ``crossJoin``-style Cartesian products.  This is what makes the pipeline
-  scale to biobank-sized inputs.
-* The silhouette is evaluated on a **stratified sample** of cluster
-  assignments to bound memory pressure while keeping cluster proportions
-  intact.
-* The cluster-level ingredient summary **pre-aggregates** the per-month
-  ingredient arrays before ``explode``, avoiding the well-known
-  ``SparkOutOfMemoryError`` blow-up that occurs when long array columns are
+    
+All wide joins (era-to-month overlap, switch detection, restart detection) are written as **range-filter joins on UNIX timestamps** rather than as
+  ``crossJoin``-style Cartesian products (scale to biobank-sized inputs).
+The cluster-level ingredient summary pre-aggregates the per-month
+  ingredient arrays before ``explode``, avoiding the ``SparkOutOfMemoryError`` blow-up that occurs when long array columns are
   exploded at the row level.
-* Two validation utilities -- :func:`validate_negative_controls` and
-  :func:`run_sensitivity_grid` -- provide the negative-control check and the
+Two validation utilities :func:`validate_negative_controls` and
+  :func:`run_sensitivity_grid` to provide the negative-control check and the
   Adjusted-Rand-Index structural-sensitivity grid used in the thesis Results
   chapter.
 """
@@ -54,10 +46,7 @@ import itertools
 import copy
 
 
-# ---------------------------------------------------------------------------
 # Cohort eligibility
-# ---------------------------------------------------------------------------
-
 def build_eligible_from_eras(era_df, observation_period, death, have_death, cfg):
     """
     Build the eligible analytic cohort with index and censor dates.
@@ -154,16 +143,12 @@ def build_eligible_from_eras(era_df, observation_period, death, have_death, cfg)
     return eligible.filter(F.col("censor_date") >= F.col("index_date"))
 
 
-# ---------------------------------------------------------------------------
 # Era builders
-# ---------------------------------------------------------------------------
-
 def build_primary_eras(drug_era):
     """
     Return the primary-analysis era table directly from OMOP ``drug_era``.
 
-    This is the canonical exposure representation used by the trajectory
-    pipeline: each row encodes a continuous span of inferred exposure to a
+    each row encodes a continuous span of inferred exposure to a
     single active ingredient.  No additional merging is performed because the
     OMOP ``drug_era`` construct already embodies an exposure-continuity
     assumption.
@@ -186,7 +171,7 @@ def build_exposure_derived_eras(drug_exposure, concept, concept_ancestor, cfg):
     Each exposure is mapped to its ingredient ancestor through
     ``concept_ancestor`` and intervals separated by no more than
     ``analysis.exposure_gap_days`` are merged into a single era using a
-    rolling-maximum gap algorithm that correctly handles transitive overlaps.
+    rolling-maximum gap algorithm that handles transitive overlaps.
     """
     gap_days = cfg["analysis"]["exposure_gap_days"]
 
@@ -278,10 +263,8 @@ def build_exposure_derived_eras(drug_exposure, concept, concept_ancestor, cfg):
     )
 
 
-# ---------------------------------------------------------------------------
-# Main trajectory pipeline
-# ---------------------------------------------------------------------------
 
+# Main trajectory pipeline
 def run_trajectory_pipeline(
         era_input_df, observation_period, death, have_death,
         ingredient_concepts, cfg, label,
@@ -289,13 +272,8 @@ def run_trajectory_pipeline(
     """
     Execute the full trajectory-phenotyping pipeline end to end.
 
-    The function is intentionally monolithic so that all transformations
-    share a single Spark execution plan and the optimiser can pipeline
-    shuffles where possible.  It is also re-entrant: it can be called
-    repeatedly (e.g. from :func:`run_sensitivity_grid`) with different
-    ``cfg`` payloads, and each call writes its outputs under a unique
-    ``label`` prefix.
-
+    all transformations share a single Spark execution plan and the optimiser can pipeline
+    shuffles where possible.  
     The ``fixed_k`` argument controls the clustering step:
 
     * ``fixed_k=None`` (default): the full silhouette grid over
@@ -338,15 +316,15 @@ def run_trajectory_pipeline(
 
     Performance contract
     --------------------
-    * **Switch detection** is implemented as a range-filter inequality join
+    Switch detection is implemented as a range-filter inequality join
       on UNIX timestamps (``unix_timestamp``) bounded by
       ``switch_window_days``.  This avoids the :math:`O(N^{2})` Cartesian
-      blow-up that occurs with a naive self-join over date columns.
-    * **Silhouette evaluation** subsamples within each cluster
+    that occurs with a naive self-join over date columns.
+    Silhouette evaluation subsamples within each cluster
       proportionally to its size so that all clusters are represented even
       when one dominates.  Cohorts smaller than 20,000 persons are evaluated
       in full.
-    * **Cluster-level ingredient ranking** pre-aggregates the per-month
+    Cluster-level ingredient ranking pre-aggregates the per-month
       ``active_set`` arrays at the cluster grain before exploding, keeping
       the row count of the exploded table linear in the number of distinct
       ingredients per cluster rather than in the total person-months.
@@ -371,11 +349,9 @@ def run_trajectory_pipeline(
     _id_type    = dict(era_input_df.dtypes).get("ingredient_concept_id", "long")
     _empty_array = F.array().cast(f"array<{_id_type}>")
 
-    # ----- Optional: restrict to focal ingredient concept_ids ------------
+    # Optional: restrict to focal ingredient concept_ids 
     # Used for interoperability demonstrations where the full prescribing
-    # profile is heterogeneous (everything in OMOP Drug) but the thesis
-    # validation question is narrower (e.g. three chronic cardio-metabolic
-    # RxNorm ingredient IDs on a external Synthea export). When omitted or
+    # profile is heterogeneous (everything in OMOP Drug). When omitted or
     # empty, behaviour is unchanged: all eras flow through.
     focus_ids = cfg.get("analysis", {}).get("focus_ingredient_concept_ids")
     if focus_ids:
@@ -386,7 +362,7 @@ def run_trajectory_pipeline(
         print(f"[{label}] focus_ingredient_concept_ids={focus_ids_clean} "
               f"--> {era_input_df.count()} era rows retained (was {n_before}).")
 
-    # ----- Eligibility ----------------------------------------------------
+    #  Eligibility 
     eligible = build_eligible_from_eras(
         era_df=era_input_df,
         observation_period=observation_period,
@@ -396,7 +372,7 @@ def run_trajectory_pipeline(
     )
     eligible.cache()
 
-    # ----- Clip eras to follow-up window ---------------------------------
+    #  Clip eras to follow-up window
     eras = (
         era_input_df.alias("d")
         .join(
@@ -420,7 +396,7 @@ def run_trajectory_pipeline(
     )
     eras.cache()
 
-    # ----- Monthly person-time grid --------------------------------------
+    #  Monthly person-time grid
     person_months = (
         eligible
         .withColumn("month_index", F.explode(F.sequence(F.lit(1), F.lit(followup_months))))
@@ -487,7 +463,7 @@ def run_trajectory_pipeline(
                     F.coalesce(F.col("active_set"), _empty_array))
     )
 
-    # ----- Monthly state classification ----------------------------------
+    #  Monthly state classification
     w_month = Window.partitionBy("person_id").orderBy("month_index")
 
     person_month_summary = (
@@ -535,9 +511,9 @@ def run_trajectory_pipeline(
         )
     )
 
-    # ----- Temporal sub-window features ----------------------------------
+    # Temporal sub-window features
     # The follow-up window is divided into ``n_windows`` equally sized
-    # sub-windows.  For each one we compute the mean burden and the
+    # sub-windows.  For each one the mean burden is computed and the
     # dominant prescribing state, retaining ordinal temporal information
     # that is otherwise destroyed by global per-person averaging.
     n_windows = 4
@@ -569,7 +545,7 @@ def run_trajectory_pipeline(
         subwindow_dfs.extend([b_feat, s_mode])
         subwindow_numeric_cols.append(f"mean_burden_{label_w}")
 
-    # ----- Maintenance eligibility ---------------------------------------
+    #  Maintenance eligibility 
     maintenance = (
         eras
         .withColumn("era_days", F.datediff("era_end_date", "era_start_date") + 1)
@@ -587,7 +563,7 @@ def run_trajectory_pipeline(
         )
     )
 
-    # ----- Discontinuation events (range-filter join) --------------------
+    #  Discontinuation events (range-filter join) 
     w_era = Window.partitionBy("person_id", "ingredient_concept_id").orderBy("era_start_date", "era_end_date")
 
     eras_for_events = (
@@ -636,7 +612,7 @@ def run_trajectory_pipeline(
     )
     eras_for_events.cache()
 
-    # --- Timestamp-range join to avoid O(N^2) Cartesian product ---------
+    #  Timestamp-range join to avoid O(N^2) Cartesian product 
     # ``SWITCH_SECS`` defines an inclusive upper bound on the join, so the
     # downstream filter is a closed-interval range predicate rather than a
     # full cross-join over all eras within the same person.
@@ -679,7 +655,7 @@ def run_trajectory_pipeline(
         )
     )
 
-    # ----- Feature construction ------------------------------------------
+    #  Feature construction
     burden = (
         person_month_summary
         .groupBy("person_id")
@@ -749,7 +725,7 @@ def run_trajectory_pipeline(
         )
     )
 
-    # ----- Person-level features -----------------------------------------
+    # Person-level features
     evaluable = (
         disc_summary.select(
             "person_id",
@@ -781,7 +757,7 @@ def run_trajectory_pipeline(
         .withColumn("disc_evaluable", F.coalesce(F.col("disc_evaluable"), F.lit(False)))
     )
 
-    # ----- Rule-based discontinuation phenotype --------------------------
+    #Rule-based discontinuation phenotype 
     features = (
         features
         .withColumn(
@@ -818,7 +794,7 @@ def run_trajectory_pipeline(
         )
     )
 
-    # ----- K-means clustering with stratified silhouette -----------------
+    # K-means clustering with stratified silhouette
     feature_cols = [
         "mean_active_n", "poly_month_prop", "mean_turnover", "burden_slope",
         "n_ingredient_eras", "n_distinct_ingredients",
@@ -849,17 +825,12 @@ def run_trajectory_pipeline(
         assembled = assembler.transform(cluster_input.fillna(0, subset=feature_cols))
         scaled = scaler.fit(assembled).transform(assembled)
 
-        # ----- Cohort-size guard for K-Means feasibility ----------------------
+        #  Cohort-size guard for K-Means feasibility 
         # PySpark's KMeans raises a non-catchable JVM
         # ArrayIndexOutOfBoundsException when the requested K exceeds the
         # number of distinct feature vectors available for fitting (e.g.
         # tiny external OMOP demos where the strict eligibility filter
-        # leaves only a handful of evaluable persons).  We compute the
-        # number of distinct evaluable feature vectors up front, and fall
-        # back to the unclustered baseline (every person assigned to -1)
-        # if even K=2 is infeasible.  This realises the safe-failure
-        # contract advertised in the Methods chapter for the small-cohort
-        # regime.
+        # leaves only a handful of evaluable persons).  
         n_distinct  = (
             cluster_input.fillna(0, subset=feature_cols)
                          .dropDuplicates(feature_cols)
@@ -879,7 +850,7 @@ def run_trajectory_pipeline(
         sil_records = []
 
         if fixed_k is not None and fixed_k <= max_feasible_k:
-            # ---- Fast path: skip silhouette evaluation entirely ----------------
+            #  Fast skip silhouette evaluation entirely 
             km = KMeans(k=fixed_k, seed=seed,
                         featuresCol="features_scaled",
                         predictionCol="trajectory_cluster")
@@ -893,7 +864,7 @@ def run_trajectory_pipeline(
             best_k = -1
             best_score = float("nan")
         else:
-            # ---- Full path: silhouette-based K selection ----------------------
+            # Full path: silhouette-based K selection 
             feasible_grid = [k for k in k_grid if k <= max_feasible_k]
             if not feasible_grid:
                 print(f"[{label}] SKIPPING K-Means: no k in {k_grid} is <= "
@@ -908,7 +879,7 @@ def run_trajectory_pipeline(
                 model = km.fit(scaled)
                 pred  = model.transform(scaled)
 
-                # --- Stratified silhouette sampling --------------------------
+                #  Stratified silhouette sampling 
                 cluster_counts = pred.groupBy("trajectory_cluster").count().collect()
                 total = sum(row["count"] for row in cluster_counts)
                 target_sample_fraction = 1.0 if total < 20_000 else 0.15
@@ -960,7 +931,7 @@ def run_trajectory_pipeline(
 
     final_person = final_person.select(*select_cols)
 
-    # ----- Cluster summaries ---------------------------------------------
+    #  Cluster summaries 
     cluster_summary = (
         final_person
         .filter(F.col("trajectory_cluster") >= 0)
@@ -985,7 +956,7 @@ def run_trajectory_pipeline(
         )
     )
 
-    # --- Pre-aggregate arrays to the cluster level before exploding -----
+    #  Pre-aggregate arrays to the cluster level before exploding 
     # ``flatten(collect_list(active_set))`` reduces the array-explode problem
     # from O(n_person_months) to O(n_clusters * distinct_ingredients), which
     # prevents the JVM-side SparkOutOfMemoryError that occurs on naive
@@ -1008,7 +979,7 @@ def run_trajectory_pipeline(
         .orderBy("trajectory_cluster", "rank")
     )
 
-    # ----- Write outputs --------------------------------------------------
+    # Write outputs 
     prefix = f"{outdir}/{label}"
     eligible.write.mode("overwrite").parquet(f"{prefix}_eligible.parquet")
     eras.write.mode("overwrite").parquet(f"{prefix}_eras.parquet")
@@ -1018,7 +989,7 @@ def run_trajectory_pipeline(
     cluster_summary.write.mode("overwrite").parquet(f"{prefix}_cluster_summary.parquet")
     top_ingredients.write.mode("overwrite").parquet(f"{prefix}_top_ingredients.parquet")
 
-    # ----- Release cached intermediates ----------------------------------
+    #  Release cached intermediates 
     eligible.unpersist()
     eras.unpersist()
     eras_for_events.unpersist()
@@ -1043,9 +1014,7 @@ def run_trajectory_pipeline(
     }
 
 
-# ---------------------------------------------------------------------------
 # Standalone validation utilities
-# ---------------------------------------------------------------------------
 
 def run_sensitivity_grid(spark, run_pipeline_fn, base_config, param_grid):
     """
@@ -1054,8 +1023,7 @@ def run_sensitivity_grid(spark, run_pipeline_fn, base_config, param_grid):
     For every Cartesian combination of values in ``param_grid``, a deep copy
     of ``base_config`` is mutated, the pipeline is executed via
     ``run_pipeline_fn``, and the resulting ``discontinuation_phenotype``
-    assignments are collected.  The Adjusted Rand Index
-    \\parencite{Hubert1985ARI} is then computed between every pair of
+    assignments are collected.  The Adjusted Rand Index is then computed between every pair of
     configurations, giving an :math:`n \\times n` matrix that quantifies how
     sensitive the phenotype assignments are to each parameter.
 
