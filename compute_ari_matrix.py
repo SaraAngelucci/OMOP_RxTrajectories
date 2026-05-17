@@ -8,9 +8,7 @@ Recomputes the 9x9 Adjusted Rand Index sensitivity matrix from the
 ``main.py`` writes to ``cfg['project']['output_dir']`` during
 Experiment 3.
 
-This is the ~10-line tail of ``run_sensitivity_grid`` that crashed when
-``scikit-learn`` was not installed.  Running this script is equivalent
-to re-running Experiment 3 but takes ~5 seconds instead of ~3 hours,
+Running this script is equivalent to re-running Experiment 3 but takes ~5 seconds instead of ~3 hours,
 because the per-configuration cluster labels are already on disk.
 
 Usage:
