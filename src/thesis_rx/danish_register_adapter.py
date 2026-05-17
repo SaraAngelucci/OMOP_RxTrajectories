@@ -1,8 +1,8 @@
 """
 danish_register_adapter.py
 ==========================
-Maps Danish National Prescription Registry (LMDB / Receptregisteret) data
-to the intermediate era format expected by run_trajectory_pipeline().
+Is suposed to map Danish National Prescription Registry (LMDB / Receptregisteret) data
+to the intermediate era format expected by run_trajectory_pipeline(). (not tested yet)
 
 Input columns expected (Statistics Denmark LMDB extract):
   - pnr          : pseudonymized person identifier (str)
@@ -13,7 +13,7 @@ Input columns expected (Statistics Denmark LMDB extract):
   - indo         : indication text (optional, not used)
   - volume       : DDD-based volume (float, optional)
 
-Output matches the schema of build_primary_eras() / build_exposure_derived_eras():
+Output should match the schema of build_primary_eras() / build_exposure_derived_eras():
   - person_id              : long (hash of pnr)
   - ingredient_concept_id  : long (numeric ATC group ID, level 5)
   - era_start_date         : date
@@ -27,7 +27,7 @@ Usage:
     obs  = build_danish_observation_period(spark, cpr_path, death_path)
     # then pass directly to run_trajectory_pipeline()
 
-Psychiatric ATC filters:
+fx Psychiatric ATC filters:
   N05A  antipsychotics
   N06A  antidepressants
   N05B  anxiolytics
@@ -43,8 +43,7 @@ import hashlib
 #  ATC → ingredient_concept_id mapping 
 #  use the 7-character ATC code (level 5 = substance) as the "ingredient".
 # Since there are no OMOP concept IDs, derive a stable integer ID from
-# the ATC string using a deterministic hash.  This is consistent within the
-# analysis and documented in methods.
+# the ATC string using a deterministic hash.  
 
 def _atc_to_concept_id_udf():
     """Returns a UDF that hashes an ATC-5 code to a stable long integer."""
@@ -198,10 +197,6 @@ def build_danish_observation_period(
     """
     Build observation_period and death tables from Danish civil registration.
 
-    The Danish prescription registry is complete from 1995 onwards, so
-    observation starts at the later of registry_start or birth+18y,
-    and ends at the earlier of registry_end, emigration date, or death date.
-
     Parameters
     ----------
     cpr_path       : path to CPR/civil registration extract with columns:
@@ -310,15 +305,13 @@ def build_danish_observation_period(
 def build_danish_ingredient_concepts(spark, eras_df) -> "DataFrame":
     """
     Build a minimal ingredient_concepts lookup table from the ATC codes
-    present in the era DataFrame.  Since we don't have OMOP vocabulary,
-    we use the ATC5 code as the concept name.
+    present in the era DataFrame. No OMOP vocabulary,
+    so use the ATC5 code as the concept name.
     """
     # Re-derive ATC5 → concept_id mapping from the eras
     atc_hash = _atc_to_concept_id_udf()
 
-    # We need the original atc5 column — re-read from lmdb or pass it through.
-    # Here we build a stub from the ingredient_concept_id in eras, noting that
-    # the caller should pass the full lmdb-derived lookup if available.
+
     concepts = (
         eras_df
         .select("ingredient_concept_id")
