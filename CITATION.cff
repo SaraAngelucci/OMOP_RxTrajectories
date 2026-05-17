@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: "Reproducible OMOP pipeline for prescription trajectories and discontinuation phenotypes in UK Biobank"
+message: "If you use this repository, please cite it and the methodological references in docs/references.bib."
+type: software
+authors:
+  - family-names: "Angelucci"
+    given-names: "Sara"
+repository-code: "https://github.com/yourusername/ukb-omop-rx-trajectories"
+license: "MIT"
+version: "0.1.0"

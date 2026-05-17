@@ -1,0 +1,45 @@
+project:
+  name: "trajectory-pipeline-synthetic-test"
+  output_dir: "./outputs/synthetic"
+
+paths:
+  raw_dir: "data/synthetic_medstat"  # Point to the new generated data folder
+  vocab_dir: "./synthetic_data"      # Keep this pointing to where CONCEPT files are
+
+files:
+  drug_era:           "synthetic_drug_era.parquet"             
+  observation_period: "synthetic_observation_period.parquet"   
+  person:             "synthetic_person.parquet"               
+  
+  # Note: Keep the concepts pointing to original vocabulary files
+  concept:            "CONCEPT.csv"
+  concept_ancestor:   "concept_ancestor.csv"
+  
+  #comment them out if not.
+  drug_exposure:      "omop_drug_exposure.csv.gz"      
+  death:              "omop_death.csv.gz"              
+
+csv:
+  header: true
+  inferSchema: true
+  concept_sep: ","
+
+analysis:
+  washout_days:               365
+  followup_months:            24
+  exposure_gap_days:          30
+  maintenance_min_total_days: 28
+  early_discontinuation_days: 90
+  restart_window_days:        180
+  switch_window_days:         60
+  polypharmacy_threshold:     5
+  turnover_low:               0.20
+  turnover_high:              0.50
+
+clustering:
+  k_grid: [2, 3, 4, 5, 6]
+  seed: 42
+
+run:
+  run_exposure_sensitivity:         false  #change to true if raw data
+  save_top_ingredients_per_cluster: 10

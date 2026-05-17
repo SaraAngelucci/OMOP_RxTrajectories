@@ -1,0 +1,43 @@
+project:
+  name: "ukb-omop-rx-trajectories"
+  output_dir: "./outputs"
+
+paths:
+  raw_dir: "file:///mnt/project/OMOP/raw_data"
+  vocab_dir: "file:///mnt/project/ICB/OMOP/maps/athena_omop"
+
+files:
+  drug_era: "omop_drug_era.csv.gz"
+  drug_exposure: "omop_drug_exposure.csv.gz"
+  observation_period: "omop_observation_period.csv.gz"
+  death: "omop_death.csv.gz"
+  concept: "CONCEPT.csv"
+  concept_ancestor: "CONCEPT_ANCESTOR.csv"
+
+csv:
+  header: true
+  inferSchema: true
+  concept_sep: "\t"
+
+analysis:
+  washout_days: 365
+  followup_months: 24
+
+  exposure_gap_days: 30
+
+  maintenance_min_total_days: 28
+  early_discontinuation_days: 90
+  restart_window_days: 180
+  switch_window_days: 60
+
+  polypharmacy_threshold: 5
+  turnover_low: 0.25
+  turnover_high: 0.50
+
+clustering:
+  k_grid: [3, 4, 5, 6, 7]
+  seed: 42
+
+run:
+  run_exposure_sensitivity: true
+  save_top_ingredients_per_cluster: 20

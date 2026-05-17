@@ -1,0 +1,41 @@
+project:
+  name: "trajectory-pipeline-external-mimic"
+  output_dir: "./outputs/external_mimic"
+
+paths:
+  raw_dir: "/Users/saraangelucci/Downloads/ukb-omop-rx-trajectories/data/external_omop_mimic"
+  vocab_dir: "./synthetic_data"
+
+files:
+  drug_era:           "synthetic_drug_era.parquet"
+  observation_period: "synthetic_observation_period.parquet"
+  person:             "synthetic_person.parquet"
+  concept:            "CONCEPT.csv"
+  concept_ancestor:   "concept_ancestor.csv"
+  drug_exposure:      "omop_drug_exposure.csv.gz"
+  death:              "omop_death.csv.gz"
+
+csv:
+  header: true
+  inferSchema: true
+  concept_sep: ","
+
+analysis:
+  washout_days:               365
+  followup_months:            24
+  exposure_gap_days:          30
+  maintenance_min_total_days: 28
+  early_discontinuation_days: 90
+  restart_window_days:        180
+  switch_window_days:         60
+  polypharmacy_threshold:     5
+  turnover_low:               0.20
+  turnover_high:              0.50
+
+clustering:
+  k_grid: [2, 3, 4, 5, 6]
+  seed: 42
+
+run:
+  run_exposure_sensitivity:         false
+  save_top_ingredients_per_cluster: 10

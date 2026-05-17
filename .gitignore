@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Pipeline outputs and generated data
+outputs/*
+!outputs/.gitkeep
+data/synthetic_medstat/
+data/validation_outputs/
+data/synthetic_omop/
+
+# Large data artefacts (never commit these)
+*.parquet
+*.csv.gz
+*.h5
+*.feather
+*.arrow
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+*.crc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / IDE
+.env
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# LaTeX build artefacts (if anyone ever compiles locally)
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.run.xml
+
+# Thesis manuscript (maintained on Overleaf, not tracked on GitHub)
+Angelucci_draft_thesis/
+NEWAngelucci_draft_thesis/

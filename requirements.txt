@@ -1,0 +1,21 @@
+# Core distributed processing
+pyspark>=3.4.0
+
+# Numerical and data handling
+pandas>=2.0.0
+numpy>=1.24.0
+pyarrow>=14.0.0
+
+# Machine learning utilities (Adjusted Rand Index)
+scikit-learn>=1.3.0
+
+# Plotting and visualisation
+matplotlib>=3.7.0
+seaborn>=0.13.0
+
+# Configuration
+pyyaml>=6.0
+
+# Jupyter environment (notebooks for Medstat trends and Gantt charts)
+notebook>=7.0.0
+ipykernel>=6.25.0

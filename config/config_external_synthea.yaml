@@ -1,0 +1,68 @@
+# -----------------------------------------------------------------------------
+# External interoperability validation: OHDSI Synthea OMOP export (e.g. NJ27 demo
+# or larger Synthea-derived CDM).  The primary thesis cohort stays on the main
+# config; this YAML relaxes clinically-driven defaults so that common primary-care
+# ingredients (rather than calibrated psychiatric ATC patterns) populate the
+# evaluable subgroup.
+#
+# Copy / adapt for any external OMOP v5 dataset by changing paths and optionally
+# focus_ingredient_concept_ids to match RxNorm Drug ingredient ancestors that
+# your distribution actually emits in drug_era.ingredient_concept_id / drug_concept_id.
+# -----------------------------------------------------------------------------
+project:
+  name: "trajectory-pipeline-external-synthea-cardio-metabolic"
+  output_dir: "./outputs/external_synthea"
+
+paths:
+  raw_dir: "/Users/saraangelucci/Downloads/ukb-omop-rx-trajectories/data/external_omop_synthea"
+  vocab_dir: "./synthetic_data"
+
+files:
+  drug_era:           "synthetic_drug_era.parquet"
+  observation_period: "synthetic_observation_period.parquet"
+  person:             "synthetic_person.parquet"
+  concept:            "CONCEPT.csv"
+  concept_ancestor:   "concept_ancestor.csv"
+  drug_exposure:      "omop_drug_exposure.csv.gz"
+  death:              "omop_death.csv.gz"
+
+csv:
+  header: true
+  inferSchema: true
+  concept_sep: ","
+
+analysis:
+  # Mildly relaxed vs. manuscript defaults so short-course / single-era refills
+  # typical of Synthea still yield maintenance-evaluable ingredient trajectories.
+  washout_days:               180
+  followup_months:            24
+  exposure_gap_days:           30
+  maintenance_min_total_days:   14
+  # Default thesis rule requires >=2 eras per ingredient; set to 1 for external
+  # interoperability checks where intermittent single-era episodes dominate.
+  maintenance_min_eras:          1
+  early_discontinuation_days:    90
+  restart_window_days:          180
+  switch_window_days:           60
+  # Only three focal RxNorm Drug ingredients configured below; burden is low.
+  polypharmacy_threshold:        2
+  turnover_low:                 0.20
+  turnover_high:                0.50
+
+  # Restriction list uses *exact values* appearing in OMOP DRUG_ERA / your
+  # parquet's ingredient_concept_id column. Athena-style RxNorm *Ingredient*
+  # IDs (e.g. metformin 1503297) apply when eras are ingredient-level;
+  # Synthea27Nj OMOP exposes many *Clinical Drug / dose form* RxNorm IDs
+  # instead—verify with a quick parquet value_counts before committing to a focal set.
+  focus_ingredient_concept_ids:
+    - 19078106   # hydrochlorothiazide 25 MG Oral Tablet (RxNorm Clinical Drug — antihypertensive)
+    - 19080128   # lisinopril 10 MG Oral Tablet
+    - 1332419    # amlodipine 5 MG Oral Tablet (cousin ID 1332418 is Ingredient; this export uses Clinical Drug rows)
+
+clustering:
+  k_grid: [2, 3, 4, 5, 6]
+  seed: 42
+
+run:
+  run_exposure_sensitivity:         false
+  save_top_ingredients_per_cluster: 10

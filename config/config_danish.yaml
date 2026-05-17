@@ -1,0 +1,33 @@
+project:
+  name: "trajectory-pipeline-danish-psychiatric"
+  output_dir: "./outputs/danish"
+
+paths:
+  raw_dir: "./???"
+  mode: "danish"
+  lmdb_path:           "/path/to/your/lmdb_data.csv"
+  cpr_path:            "/path/to/your/cpr_data.csv"
+  death_path:          "/path/to/your/death_data.csv"
+  atc_filter:          ["N05A", "N06A", "N05B"]
+  gap_days:            30
+  default_supply_days: 30
+
+analysis:
+  washout_days:               365
+  followup_months:            24
+  exposure_gap_days:          30
+  maintenance_min_total_days: 28
+  early_discontinuation_days: 90
+  restart_window_days:        180
+  switch_window_days:         60
+  polypharmacy_threshold:     5
+  turnover_low:               0.20
+  turnover_high:              0.50
+
+clustering:
+  k_grid: [3, 4, 5, 6, 7, 8]
+  seed: 42
+
+run:
+  run_exposure_sensitivity:         false
+  save_top_ingredients_per_cluster: 15
