@@ -43,3 +43,4 @@ clustering:
 run:
   run_exposure_sensitivity:         false  #change to true if raw data
   save_top_ingredients_per_cluster: 10
+  label: "cosine" # Changed from baseline_cohort
