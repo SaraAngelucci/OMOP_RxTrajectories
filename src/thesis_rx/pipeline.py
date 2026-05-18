@@ -36,7 +36,7 @@ Two validation utilities :func:`validate_negative_controls` and
 """
 
 from pyspark.sql import functions as F, Window
-from pyspark.ml.feature import VectorAssembler, StandardScaler
+from pyspark.ml.feature import VectorAssembler, StandardScaler, Normalizer
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import ClusteringEvaluator
 from .utils import jaccard_distance
@@ -813,17 +813,20 @@ def run_trajectory_pipeline(
                             withMean=True, withStd=True)
     assembler = VectorAssembler(inputCols=feature_cols, outputCol="features_raw",
                                 handleInvalid="keep")
+    # ADDED: L2 Normalizer to force Cosine distance
+    normalizer = Normalizer(inputCol="features_scaled", outputCol="features_cosine", p=2.0)
 
     best_model = None
     best_k = None
     best_score = float("nan")
 
     if n_evaluable == 0:
-        print(f"[{label}] SKIPPING K-Means: n_evaluable=0 (Spark StandardScaler "
-              f"unsupported on empty input); trajectory_cluster defaults to -1.")
+        print(f"[{label}] SKIPPING K-Means: n_evaluable=0...")
     else:
         assembled = assembler.transform(cluster_input.fillna(0, subset=feature_cols))
         scaled = scaler.fit(assembled).transform(assembled)
+        # ADDED: Apply the normalizer to the scaled features
+        scaled = normalizer.transform(scaled)
 
         #  Cohort-size guard for K-Means feasibility 
         # PySpark's KMeans raises a non-catchable JVM
@@ -841,18 +844,28 @@ def run_trajectory_pipeline(
               f"n_distinct_feature_vectors={n_distinct}, "
               f"max_feasible_k={max_feasible_k}")
 
+        #evaluator = ClusteringEvaluator(
+        #    featuresCol="features_scaled",
+        #   predictionCol="trajectory_cluster",
+        #   metricName="silhouette"
+        #)
+        # Change featuresCol here!
         evaluator = ClusteringEvaluator(
-            featuresCol="features_scaled",
+            featuresCol="features_cosine", 
             predictionCol="trajectory_cluster",
             metricName="silhouette"
         )
 
         sil_records = []
 
-        if fixed_k is not None and fixed_k <= max_feasible_k:
+        #if fixed_k is not None and fixed_k <= max_feasible_k:
             #  Fast skip silhouette evaluation entirely 
+            #km = KMeans(k=fixed_k, seed=seed,
+                        #featuresCol="features_scaled",
+                        #predictionCol="trajectory_cluster")
+        if fixed_k is not None and fixed_k <= max_feasible_k:
             km = KMeans(k=fixed_k, seed=seed,
-                        featuresCol="features_scaled",
+                        featuresCol="features_cosine", 
                         predictionCol="trajectory_cluster")
             best_model = km.fit(scaled)
             best_k     = fixed_k
@@ -872,9 +885,13 @@ def run_trajectory_pipeline(
             else:
                 best_score = -1.0  # initialise for max search
 
+            #for k in feasible_grid:
+               # km = KMeans(k=k, seed=seed,
+                         #  featuresCol="features_scaled",
+                          #  predictionCol="trajectory_cluster")
             for k in feasible_grid:
                 km = KMeans(k=k, seed=seed,
-                            featuresCol="features_scaled",
+                            featuresCol="features_cosine",
                             predictionCol="trajectory_cluster")
                 model = km.fit(scaled)
                 pred  = model.transform(scaled)
