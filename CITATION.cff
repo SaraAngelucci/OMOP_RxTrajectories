@@ -5,6 +5,6 @@ type: software
 authors:
   - family-names: "Angelucci"
     given-names: "Sara"
-repository-code: "https://github.com/yourusername/OMOP_RxTrajectories"
+repository-code: "https://github.com/SaraAngelucci/OMOP_RxTrajectories"
 license: "MIT"
 version: "0.1.0"
