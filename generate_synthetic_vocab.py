@@ -1,11 +1,11 @@
 """
 generate_synthetic_vocab.py
 ----------------------------
-Minimal OMOP vocabulary under ``./synthetic_data/``:
+Emit minimal OMOP vocabulary stubs under ``./synthetic_data/``:
 
-* ``CONCEPT.csv``  ingredient (and optional RxNorm clinical-drug) rows
+* ``CONCEPT.csv`` --- ingredient (and optional RxNorm clinical-drug) rows
   referenced by ``generate_synthetic_cohort.py``.
-* ``concept_ancestor.csv`` identity rows (ancestor =
+* ``concept_ancestor.csv`` --- trivial identity rows (ancestor =
   descendant) for every ``concept_id`` in ``CONCEPT.csv``.  Required because
   ``main.py`` always loads ``concept_ancestor`` via ``src/thesis_rx/io.py``
   before pipeline execution.

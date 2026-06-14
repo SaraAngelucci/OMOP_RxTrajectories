@@ -2,38 +2,37 @@
 main.py
 =======
 
-This script runs three independent experiments on the Medstat-calibrated
+Scientific orchestrator for the thesis pipeline.
+
+This script runs two independent experiments on the Medstat-calibrated
 synthetic OMOP cohort produced by ``generate_synthetic_cohort.py``:
 
-1. Baseline run: executes :func:`run_trajectory_pipeline` once with
+1. **Baseline run** -- executes :func:`run_trajectory_pipeline` once with
    the parameters in ``config/config_synthetic.yaml`` and writes all
    intermediate artefacts to ``cfg['project']['output_dir']``.
-2. Negative-control validation: isolates the patients that were
+2. **Negative-control validation** -- isolates the patients that were
    generated under the ``acute_antibiotic`` archetype and asserts that
    they are not flagged as maintenance-evaluable.
-3. Structural sensitivity grid: runs a 3x3 grid over
-   ``polypharmacy_threshold`` and ``maintenance_min_total_days`` and
-   computes the Adjusted Rand Index (ARI) between every pair of
-   configurations. By default it fixes ``GRID_FIXED_K=2`` (fast); set
-   ``GRID_SILHOUETTE_IN_GRID=1`` to re-select ``k`` with silhouette inside
-   every cell.
-
-All long-running Spark caches are released via
-``spark.catalog.clearCache()`` between grid iterations to avoid JVM
-``SparkOutOfMemoryError`` on machines with limited driver memory.
 """
 
 import os
-import uuid
+import sys
 
-import pandas as pd
+# Ensure Spark's Python workers use the *same* interpreter as the driver.
+# Without this, Spark falls back to whatever ``python3`` is first on PATH,
+# which on many systems is an older build (e.g. 3.9). The pipeline uses PEP 604
+# ``X | Y`` type-union syntax and therefore requires Python >= 3.10; a 3.9
+# worker crashes with "unsupported operand type(s) for |". Pinning both env
+# vars to ``sys.executable`` makes the run reproducible regardless of PATH.
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
+
 import yaml
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import LongType, StringType, StructField, StructType
 
 from src.thesis_rx.pipeline import (
-    run_sensitivity_grid,
     run_trajectory_pipeline,
     validate_negative_controls,
 )
@@ -43,8 +42,8 @@ def main():
     """Run the full three-experiment thesis workflow end to end."""
     # Resource configuration is read from environment so the same code path
     # supports 1k, 50k, and larger cohorts without source edits.
-    #   SPARK_DRIVER_MEMORY (default: 8g)         or to 16g for 50k+
-    #   SPARK_SHUFFLE_PARTITIONS (default: 50)    or to 200 for 50k+
+    #   SPARK_DRIVER_MEMORY (default: 8g)        -- bump to 16g for 50k+
+    #   SPARK_SHUFFLE_PARTITIONS (default: 50)   -- bump to 200 for 50k+
     #   SPARK_CONFIG_PATH (default: config/config_synthetic.yaml)
     driver_mem = os.environ.get("SPARK_DRIVER_MEMORY", "8g")
     shuffle_parts = os.environ.get("SPARK_SHUFFLE_PARTITIONS", "50")
@@ -61,7 +60,7 @@ def main():
         .getOrCreate()
     )
 
-    # Load configuration 
+    # ----- Load configuration --------------------------------------------
     print(f"Loading config: {config_path}")
     with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
@@ -69,14 +68,17 @@ def main():
     out_dir = cfg["project"]["output_dir"]
     os.makedirs(out_dir, exist_ok=True)
 
-    # Load synthetic data 
+    # ----- Load synthetic data -------------------------------------------
     print("=== Loading Data ===")
     raw_dir = cfg["paths"]["raw_dir"]
 
     eras_df = spark.read.parquet(f"{raw_dir}/{cfg['files']['drug_era']}")
     obs_df = spark.read.parquet(f"{raw_dir}/{cfg['files']['observation_period']}")
 
-    # pre-check avoids the FileNotFoundException stack trace when CONCEPT.csv is absent. The fallback is an empty typed DataFrame so all
+    # Robust concept loading: an existence pre-check avoids the noisy JVM
+    # FileNotFoundException stack trace when CONCEPT.csv is absent (which is
+    # the expected case for the synthetic cohort if no vocabulary stub has
+    # been generated). The fallback is an empty typed DataFrame so all
     # downstream joins remain schema-safe.
     vocab_dir = cfg["paths"]["vocab_dir"]
     concept_path = os.path.join(vocab_dir, cfg["files"]["concept"])
@@ -95,8 +97,9 @@ def main():
         ])
         concepts_df = spark.createDataFrame(spark.sparkContext.emptyRDD(), schema)
 
-   
-    #EXPERIMENT 1: Baseline run
+    # ====================================================================
+    # EXPERIMENT 1: Baseline run
+    # ====================================================================
     print("\n[EXPERIMENT 1] Executing Baseline Pipeline...")
     base_results = run_trajectory_pipeline(
         era_input_df=eras_df,
@@ -111,8 +114,9 @@ def main():
     final_person_df.cache()
     print("Baseline execution complete. Outputs saved to disk.")
 
-    
-    #EXPERIMENT 2: Negative-control validation
+    # ====================================================================
+    # EXPERIMENT 2: Negative-control validation
+    # ====================================================================
     print("\n[EXPERIMENT 2] Validating Negative Controls...")
     acute_patients = (
         eras_df.filter(F.col("archetype") == "acute_antibiotic")
@@ -128,74 +132,6 @@ def main():
     else:
         print(f">>> WARNING: {validation_res['n_violations']} acute exposures leaked into maintenance phenotypes.")
         validation_res["violations"].show()
-
-   
-    #EXPERIMENT 3: Structural sensitivity grid (ARI matrix)
-    print("\n[EXPERIMENT 3] Running Structural Sensitivity Analysis (ARI Grid)...")
-
-    param_grid = {
-        "polypharmacy_threshold": [4, 5, 6],
-        "maintenance_min_total_days": [14, 28, 56],
-    }
-
-    # Experiment 3: default is fixed K inside the grid (fast). Baseline always
-    # runs the full silhouette grid (Experiment 1 calls run_trajectory_pipeline
-    # with fixed_k omitted). Override with GRID_SILHOUETTE_IN_GRID=1 to re-evaluate
-    # silhouette per grid cell (~9× the clustering cost).
-
-    silhouette_in_grid = os.environ.get("GRID_SILHOUETTE_IN_GRID", "").strip().lower() in (
-        "1", "true", "yes",
-    )
-
-    grid_fixed_k = (
-        None
-        if silhouette_in_grid else int(os.environ.get("GRID_FIXED_K", "2")))
-
-    def pipeline_wrapper(current_cfg):
-        """
-        Wrap ``run_trajectory_pipeline`` for the grid orchestrator.
-
-        Assigns a unique ``label``, suppresses Spark INFO logs, clears
-        the catalog cache between cells, and threads ``fixed_k``: by default it
-        is set from ``GRID_FIXED_K`` so silhouette evaluation is skipped inside
-        the grid; set ``GRID_SILHOUETTE_IN_GRID`` to preserve full silhouette-based
-        $K$ selection in every cell (~9-fold clustering cost increase).
-        """
-        run_id = f"grid_run_{uuid.uuid4().hex[:6]}"
-        spark.sparkContext.setLogLevel("ERROR")
-
-        res = run_trajectory_pipeline(
-            era_input_df=eras_df,
-            observation_period=obs_df,
-            death=None,
-            have_death=False,
-            ingredient_concepts=concepts_df,
-            cfg=current_cfg,
-            label=run_id,
-            fixed_k=None if silhouette_in_grid else grid_fixed_k,
-        )
-        spark.catalog.clearCache()
-        return res
-
-    configs_used, ari_matrix = run_sensitivity_grid(
-        spark=spark,
-        run_pipeline_fn=pipeline_wrapper,
-        base_config=cfg,
-        param_grid=param_grid,
-    )
-
-    config_labels = [
-        f"Poly:{c['analysis']['polypharmacy_threshold']}_Maint:{c['analysis']['maintenance_min_total_days']}d"
-        for c in configs_used
-    ]
-    ari_df = pd.DataFrame(ari_matrix, index=config_labels, columns=config_labels)
-    ari_path = f"{out_dir}/ari_sensitivity_matrix.csv"
-    ari_df.to_csv(ari_path)
-
-    print("\n>>> SENSITIVITY GRID COMPLETE")
-    print(f"ARI Matrix saved to: {ari_path}")
-    print("\nARI Matrix Preview:")
-    print(ari_df.round(3))
 
     print("\nAll Pipeline Executions Finished Successfully")
 

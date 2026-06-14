@@ -25,22 +25,42 @@ csv:
   concept_sep: ","
 
 analysis:
-  washout_days:               365
-  followup_months:            24
-  exposure_gap_days:          30
-  maintenance_min_total_days: 28
-  early_discontinuation_days: 90
-  restart_window_days:        180
-  switch_window_days:         60
-  polypharmacy_threshold:     5
-  turnover_low:               0.20
-  turnover_high:              0.50
+  washout_days:                   365
+  followup_months:                24
+  exposure_gap_days:              30
+  maintenance_min_total_days:     56    # Tier B: cumulative duration across >=2 eras (raised from 28 to reduce acute leakage)
+  maintenance_min_eras:           2     # Tier B: minimum distinct eras
+  maintenance_single_era_min_days: 180  # Tier A: a single continuous era >= 180 days (6-month chronic-use convention)
+  early_discontinuation_days:     90
+  restart_window_days:            180
+  switch_window_days:             60
+  polypharmacy_threshold:         5
+  turnover_low:                   0.20
+  turnover_high:                  0.50
+
+# Thresholds for the rule-based discontinuation phenotype decision rule
+# (Methods §3.10). Externalised so the phenotype definitions are fully
+# specified by configuration rather than hard-coded in the pipeline.
+phenotype:
+  stable_turnover_max:   0.20   # mean_turnover below this is "stable"
+  early_disc_low:        0.25   # early_disc_90_rate below this is compatible with stable use
+  early_disc_high:       0.50   # early_disc_90_rate at/above this is "Early drop-off / de-intensification"
+  restart_high:          0.50   # restart_180_rate at/above this is "Intermittent stop-start"
+  switch_high:           0.50   # switch_60_rate at/above this is "High-turnover switching"
+  burden_slope_neg:     -0.10   # burden_slope below this indicates de-intensification
 
 clustering:
+  # Full silhouette sweep used to render the model-selection diagnostic
+  # (silhouette-vs-k curve, Figure 4.2).
   k_grid: [2, 3, 4, 5, 6]
+  # Operational partition used for the reported phenotypic interpretation
+  # (Table 4.2). The silhouette curve is computed over the full k_grid, but
+  # the final cluster assignment is fixed at final_k for interpretability.
+  # Set to null to use the silhouette-optimal k instead.
+  final_k: 4
   seed: 42
 
 run:
   run_exposure_sensitivity:         false  #change to true if raw data
   save_top_ingredients_per_cluster: 10
-  label: "cosine" # Changed from baseline_cohort
+  label: "cosine"

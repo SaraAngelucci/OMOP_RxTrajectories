@@ -9,16 +9,16 @@ The suite executes two complementary blocks:
 1. ``run_primary_cohort_assertions`` builds a five-patient cohort that
    encodes the principal clinical edge cases (stable monotherapy,
    escalating polypharmacy, intermittent stop--start, acute exposure,
-   right-censored drop-off) and checks  that the pipeline assigns the
+   right-censored drop-off) and asserts that the pipeline assigns the
    expected discontinuation phenotype labels, the expected
    ``trajectory_cluster`` membership, and the expected per-feature values
    for each archetype.
 
 2. ``run_edge_case_assertions`` runs three small additional cohorts that
    exercise pathological inputs:
-       1.   a one-patient cohort (cannot K-means cluster);
-       2. a two-patient cohort with overlapping ingredient eras;
-       3. a two-patient cohort whose eras straddle the
+       (i)   a one-patient cohort (cannot K-means cluster);
+       (ii)  a two-patient cohort with overlapping ingredient eras;
+       (iii) a two-patient cohort whose eras straddle the
               observation-period boundary.
    Each block verifies that the pipeline degrades safely and writes
    well-formed artefacts.
@@ -33,7 +33,19 @@ or under pytest discovery::
 """
 
 import os
+import sys
 import datetime
+
+# Pin Spark's Python workers to the driver interpreter (>= 3.10 required for the
+# PEP 604 ``X | Y`` type-union syntax used in the pipeline). See main.py.
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
+
+# Make the repository root importable when this file is run directly
+# (``python tests/test_validation_cohort.py``) and not only under pytest, whose
+# rootdir insertion would otherwise be the only thing putting ``src`` on the path.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructType, StructField, LongType, DateType, IntegerType
@@ -80,7 +92,7 @@ def create_omop_synthetic_cohort(spark):
         # Patient 5: Censoring Edge Case (Era ends right before observation ends)
         (5, 101, datetime.date(2020, 1, 1), datetime.date(2021, 12, 1), 1, 0)
     ]
-    era_schema = ["person_id", "ingredient_concept_id", "era_start_date", "era_end_date", "drug_exposure_count", "gap_days"]
+    era_schema = ["person_id", "ingredient_concept_id", "drug_era_start_date", "drug_era_end_date", "drug_exposure_count", "gap_days"]
     era_df = spark.createDataFrame(era_data, schema=era_schema)
     return era_df, obs_df
 
@@ -97,29 +109,29 @@ def run_automated_assertions(results):
     person_phenos = results["final_person"].toPandas().set_index("person_id")
     era_events = results["era_events"].toPandas()
 
-    #TEST 1: Stable Monotherapy
+    # TEST 1: Stable Monotherapy
     assert person_phenos.loc[1, 'discontinuation_phenotype'] == "Persistent stable use", "FAIL: Patient 1 should be Stable Mono."
     print("Logic Check 1 (Stable Monotherapy): PASSED")
 
-    #TEST 2: Escalating Polypharmacy Threshold
+    # TEST 2: Escalating Polypharmacy Threshold
     assert person_phenos.loc[2, 'poly_month_prop'] > 0, "FAIL: Patient 2 did not trigger polypharmacy threshold."
     print("Logic Check 2 (Polypharmacy Detection): PASSED")
 
-    #TEST 3: Restart Detection (Stop-Start)
+    # TEST 3: Restart Detection (Stop-Start)
     assert person_phenos.loc[3, 'restart_180_rate'] > 0, f"FAIL: Patient 3 restart not detected. Actual rate: {person_phenos.loc[3, 'restart_180_rate']}"
     print("Logic Check 3 (Restart 180d Window): PASSED")
 
-    #TEST 4: Maintenance-Aware Logic (Acute Exclusion)
+    # TEST 4: Maintenance-Aware Logic (Acute Exclusion)
     assert person_phenos.loc[4, 'disc_evaluable'] == False, "FAIL: Patient 4 (Acute 7-day) was improperly evaluated as maintenance."
     print("Logic Check 4 (Acute Exposure Filtering): PASSED")
 
-    #TEST 5: Right-Censoring Bias Check
+    # TEST 5: Right-Censoring Bias Check
     events_pt5 = era_events[era_events['person_id'] == 5].iloc[0]
     assert events_pt5['observed_for_restart_window'] == 0, "FAIL: Patient 5 was not properly right-censored."
     print("Logic Check 5 (Right-Censoring Handling): PASSED")
 
-    # Additional assertions on cluster assignment and feature values 
-    #TEST 6: Trajectory cluster column exists, is integer-typed, and is finite
+    # ---- Additional assertions on cluster assignment and feature values ----
+    # TEST 6: Trajectory cluster column exists, is integer-typed, and is finite
     assert "trajectory_cluster" in person_phenos.columns, (
         "FAIL: trajectory_cluster column missing from final_person output."
     )
@@ -129,7 +141,7 @@ def run_automated_assertions(results):
     )
     print("Logic Check 6 (Cluster column present and integer-typed): PASSED")
 
-    #TEST 7: Patient 4 (acute) and Patient 5 (right-censored) should NOT be
+    # TEST 7: Patient 4 (acute) and Patient 5 (right-censored) should NOT be
     # in the same maintenance-evaluable subset; clustering should not place
     # them in the same partition as Patient 1 (a clean stable case).
     p1_cluster = person_phenos.loc[1, "trajectory_cluster"]
@@ -140,7 +152,7 @@ def run_automated_assertions(results):
     )
     print("Logic Check 7 (Acute patient excluded from clustering): PASSED")
 
-    #TEST 8: Feature values for the stable monotherapy patient are sane:
+    # TEST 8: Feature values for the stable monotherapy patient are sane:
     # non-zero number of ingredient eras and a non-trivial median era duration.
     p1_n_eras = int(person_phenos.loc[1, "n_ingredient_eras"])
     p1_median_era = float(person_phenos.loc[1, "median_era_days"])
@@ -151,7 +163,7 @@ def run_automated_assertions(results):
     )
     print("Logic Check 8 (Stable-monotherapy feature values plausible): PASSED")
 
-    #TEST 9: Patient 2 (5-drug polypharmacy) has strictly more distinct
+    # TEST 9: Patient 2 (5-drug polypharmacy) has strictly more distinct
     # ingredients than Patient 1 (monotherapy).
     p1_distinct = int(person_phenos.loc[1, "n_distinct_ingredients"])
     p2_distinct = int(person_phenos.loc[2, "n_distinct_ingredients"])
@@ -161,7 +173,16 @@ def run_automated_assertions(results):
     )
     print("Logic Check 9 (Polypharmacy distinct-ingredient ordering): PASSED")
 
-    print("\n 9 primary-cohort assertions passed.")
+    # TEST 10: Patient 1 (single 730-day era) enters via Tier A
+    # Under old code this patient was excluded. Under new code they must be evaluable.
+    assert person_phenos.loc[1, 'disc_evaluable'] == True, (
+        "FAIL: Patient 1 (single 730-day era) should be maintenance-eligible "
+        "via Tier A (single_era_min_days=180) but disc_evaluable=False. "
+        "This means the Tier A eligibility fix is not working."
+    )
+    print("Logic Check 10 (Tier A single-era eligibility): PASSED")
+
+    print("\n--- 10 primary-cohort assertions passed. ---")
     _ = p1_cluster  # silence linter; cluster id is implementation-detail
 
 def export_for_thesis(results, output_dir="data/validation_outputs"):
@@ -178,10 +199,7 @@ def export_for_thesis(results, output_dir="data/validation_outputs"):
 
 def _build_edge_cohort(spark, persons, eras):
     """Helper: build an (era_df, obs_df) pair from python tuples."""
-    era_schema = [
-        "person_id", "ingredient_concept_id", "era_start_date",
-        "era_end_date", "drug_exposure_count", "gap_days",
-    ]
+    era_schema = ["person_id", "ingredient_concept_id", "drug_era_start_date", "drug_era_end_date", "drug_exposure_count", "gap_days"]
     obs_schema = [
         "person_id", "observation_period_start_date",
         "observation_period_end_date",
@@ -194,13 +212,13 @@ def _build_edge_cohort(spark, persons, eras):
 
 def run_edge_case_assertions(spark, cfg, concepts_df, death_df):
     """
-    Three pathological-input cohorts exercising the safe-failure contract.
+    Four pathological-input cohorts exercising the safe-failure contract.
     """
     print("\n" + "=" * 50)
     print("EDGE-CASE COHORTS (safe-failure contract)")
     print("=" * 50)
 
-    #  Edge 1: single-patient cohort
+    # ---- Edge 1: single-patient cohort ----
     eras_1 = [
         (1001, 101, datetime.date(2020, 1, 1), datetime.date(2021, 12, 31), 1, 0),
     ]
@@ -216,14 +234,13 @@ def run_edge_case_assertions(spark, cfg, concepts_df, death_df):
     )
     fp = res["final_person"].toPandas().set_index("person_id")
     assert 1001 in fp.index, "FAIL: single-patient cohort dropped the patient."
-    # Single distinct feature vector -> clustering should be withheld (-1)
     cluster_val = int(fp.loc[1001, "trajectory_cluster"])
     assert cluster_val == -1, (
         f"FAIL: single-patient cohort expected sentinel cluster -1, got {cluster_val}."
     )
     print("Edge Check 1 (single-patient cohort -> sentinel cluster -1): PASSED")
 
-    # Edge 2: overlapping eras (same ingredient, overlapping windows) 
+    # ---- Edge 2: overlapping eras (same ingredient, overlapping windows) ----
     eras_2 = [
         (2001, 201, datetime.date(2020, 1, 1), datetime.date(2020, 6, 30), 1, 0),
         (2001, 201, datetime.date(2020, 5, 1), datetime.date(2020, 9, 30), 1, 0),
@@ -242,17 +259,14 @@ def run_edge_case_assertions(spark, cfg, concepts_df, death_df):
         label="edge_overlap",
     )
     fp = res["final_person"].toPandas().set_index("person_id")
-    # Both patients must appear in the output without crash.
     assert {2001, 2002}.issubset(set(fp.index)), (
         "FAIL: overlapping-era cohort dropped one or more patients."
     )
     print("Edge Check 2 (overlapping eras handled without crash): PASSED")
 
-    # Edge 3: eras straddling the observation-period boundary 
+    # ---- Edge 3: eras straddling the observation-period boundary ----
     eras_3 = [
-        # Era starts inside follow-up window, ends just after observation_period_end.
         (3001, 301, datetime.date(2020, 1, 1), datetime.date(2023, 6, 30), 1, 0),
-        # Era starts before any reasonable index date.
         (3002, 301, datetime.date(2017, 1, 1), datetime.date(2018, 12, 31), 1, 0),
     ]
     obs_3 = [
@@ -267,15 +281,47 @@ def run_edge_case_assertions(spark, cfg, concepts_df, death_df):
         label="edge_boundary",
     )
     fp = res["final_person"].toPandas().set_index("person_id")
-    # No exceptions thrown is the principal assertion; output must be non-empty.
     assert len(fp) > 0, "FAIL: boundary-spanning cohort produced empty output."
     print("Edge Check 3 (boundary-spanning eras handled without crash): PASSED")
 
-    print("\n--- 3 edge-case assertions passed. ---")
+    # ---- Edge 4: acute-only multi-course patient below Tier B (NEW) --------
+    eras_4 = [
+        (4001, 401, datetime.date(2020, 1, 1), datetime.date(2020, 1, 10), 1, 0),
+        (4001, 401, datetime.date(2020, 3, 1), datetime.date(2020, 3, 10), 1, 0),
+        (4001, 401, datetime.date(2020, 6, 1), datetime.date(2020, 6, 10), 1, 0),
+    ]
+    obs_4 = [
+        (4001, datetime.date(2018, 1, 1), datetime.date(2023, 1, 1)),
+    ]
+    era_df, obs_df = _build_edge_cohort(spark, obs_4, eras_4)
+    cfg_e = {**cfg, "project": {"output_dir": "data/validation_outputs/edge_acute_multi"}}
+    res = run_trajectory_pipeline(
+        era_input_df=era_df, observation_period=obs_df, death=death_df,
+        have_death=False, ingredient_concepts=concepts_df, cfg=cfg_e,
+        label="edge_acute_multi",
+    )
+    fp = res["final_person"].toPandas().set_index("person_id")
+    assert 4001 in fp.index, "FAIL: multi-course acute cohort dropped the patient."
+    assert fp.loc[4001, "disc_evaluable"] == False, (
+        "FAIL: Patient 4001 (3×10-day courses, 30 total days) incorrectly "
+        "set disc_evaluable=True."
+    )
+    print("Edge Check 4 (multi-course acute below Tier B threshold excluded): PASSED")
+
+    print("\n--- 4 edge-case assertions passed. ---")
 
 
-def main():
-    spark = SparkSession.builder.appName("Thesis_Pipeline_Validation").master("local[*]").getOrCreate()
+def test_main():
+    # Keep our vital memory and partition fixes!
+    spark = (SparkSession.builder
+             .appName("Thesis_Pipeline_Validation")
+             .master("local[*]")
+             .config("spark.driver.memory", "6g")
+             .config("spark.sql.shuffle.partitions", "4")
+             .getOrCreate())
+             
+    # Silence verbose Spark logs so the assertion output is readable.
+    spark.sparkContext.setLogLevel("ERROR")
     
     # 1. Init Data
     era_df, obs_df = create_omop_synthetic_cohort(spark)
@@ -295,7 +341,9 @@ def main():
         "analysis": {
             "washout_days": 365,
             "followup_months": 24,
-            "maintenance_min_total_days": 28,
+            "maintenance_min_total_days": 56,         
+            "maintenance_min_eras": 2,                
+            "maintenance_single_era_min_days": 180,   
             "early_discontinuation_days": 90,
             "restart_window_days": 180,
             "switch_window_days": 60,
@@ -332,4 +380,4 @@ def main():
     print("\nVALIDATION COMPLETE. Pipeline is theoretically sound.")
 
 if __name__ == "__main__":
-    main()
+    test_main()
