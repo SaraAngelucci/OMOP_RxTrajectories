@@ -1,9 +1,7 @@
 # Errata and post-submission changes
 
 This document records corrections and code changes made **after** the thesis PDF
-was submitted. The submitted PDF is unchanged; this file is the authoritative
-record of what differs between the manuscript text and the current codebase, and
-why each change is scientifically justified.
+was submitted.
 
 All numbers below were reproduced with the synthetic cohort generator
 (`generate_synthetic_cohort.py`, `N=1000`, `seed=42`) and the pipeline run under
@@ -23,7 +21,7 @@ submitted PDF.
 | Acute exposures leaked into maintenance phenotypes | **0 / 143** |
 | Operational partition | **k = 4** |
 
-### Cosine silhouette sweep (evaluator distance = cosine, matching the fit)
+### Cosine silhouette
 
 | k | silhouette |
 |---|---|
@@ -34,15 +32,14 @@ submitted PDF.
 | 6 | 0.7354 |
 
 The silhouette is monotonically increasing over the grid, so the
-silhouette-optimal value is at the grid edge (k = 6). We therefore **do not**
+silhouette-optimal value is at the grid edge (k = 6). Therefore **do not**
 select k by the silhouette maximum. k = 4 is fixed *a priori* as the operational
 partition for phenotypic interpretability (`clustering.final_k: 4`), and the full
-sweep is reported only as a model-selection diagnostic (Figure 4.2). This is
-stated honestly rather than presenting k = 4 as a silhouette optimum.
+sweep is reported only as a model-selection diagnostic (Figure 4.2).
 
 ---
 
-## Change 1 — Synthetic generator now exercises the discontinuation features
+## Synthetic generator now exercises the discontinuation features
 
 **Problem.** In the submitted version, `early_disc_90_rate`, `switch_60_rate`,
 and `poly_month_prop` were effectively constant (≈0 / never reaching the
@@ -50,8 +47,7 @@ polypharmacy threshold) in the synthetic cohort. They contributed no variance to
 the feature vector, so the "maintenance-aware discontinuation" capability was
 present in code but unsupported by the data.
 
-**Fix (chose to *exercise*, not drop, the features).** Three calibrated
-archetypes were added to `generate_synthetic_cohort.py` so that each of the three
+**Fix** Three calibrated archetypes were added to `generate_synthetic_cohort.py` so that each of the three
 features now varies across genuinely eligible patients:
 
 - `N06A_early_then_restart` (prevalence 0.06): a short initial era followed by a
@@ -68,20 +64,13 @@ Supporting vocabulary additions: a fifth ingredient
 (`700060 lamotrigine`) was added to `synthetic_data/CONCEPT.csv` and an identity
 row to `synthetic_data/concept_ancestor.csv` so a 5-drug concurrent regimen is
 representable. `no_psychiatric_rx` prevalence was reduced (0.35 → 0.22) to make
-room for the new eligible patients, and a mislabelled additional drug in
-`polypharmacy_escalating` was corrected.
-
-**Result (traceable to archetype sizes).** All three features now fire with
-non-trivial support: early drop-off / de-intensification n = 79, high-turnover
-switching n = 41, stable polypharmacy n = 40. The features carry real variance
-into the clustering.
+room for the new eligible patients.
 
 ---
 
-## Change 2 — Table 4.2 re-derived from actual cluster centroids
+## Table 4.2 re-derived 
 
-The submitted Table 4.2 archetype descriptions did not match the centroids the
-pipeline actually produces. Below is the **re-derived** k = 4 table, computed
+Below is the **re-derived** k = 4 table, computed
 directly from the cluster-mean feature values of the current run. These
 descriptions should be read in place of the submitted Table 4.2.
 
@@ -96,22 +85,7 @@ descriptions should be read in place of the submitted Table 4.2.
 
 ---
 
-## Change 3 — Manuscript reconciled to a single pipeline version (n = 478 / k = 4)
-
-The submitted text mixed numbers from more than one pipeline configuration.
-The canonical regime is the one in the table above: **n_evaluable = 478, k = 4**,
-with the cosine silhouette sweep as reported. §4.1 (cohort/eligibility counts)
-and §4.2 (clustering results) should both be read against these numbers. Where
-the PDF gives a different evaluable-n or a different silhouette value for k = 4,
-the values in this errata are authoritative.
-
----
-
-## Change 4 — 56-vs-180-day single-era discrepancy resolved
-
-The submitted text described the single continuous-era maintenance threshold
-using 56 days, which conflated two distinct rules. They are now kept separate and
-documented in `config/config_synthetic.yaml`:
+## 56-vs-180-day single-era 
 
 - **Tier A — single-era chronic use:** one continuous era ≥ **180 days**
   (`maintenance_single_era_min_days: 180`). 180 days is the 6-month chronic-use
@@ -120,55 +94,9 @@ documented in `config/config_synthetic.yaml`:
   ≥ **56 days** total (`maintenance_min_total_days: 56`, raised from 28 to reduce
   acute-exposure leakage; `maintenance_min_eras: 2`).
 
-The 56-day figure belongs to Tier B (the cumulative rule), **not** to the
-single-era rule. The submitted text's use of 56 for a single era was an error;
-the intended single-era threshold is 180 days. Code and config now agree.
-
 ---
 
-## Change 5 — Silhouette evaluator distance matched to the fitting distance
-
-Clustering is performed in an L2-normalised space (StandardScaler →
-Normalizer p = 2 → Euclidean K-means), which is cosine-equivalent. The submitted
-evaluation used Spark's default `squaredEuclidean` silhouette, which does **not**
-match the geometry the model was fit in. The evaluator is now:
-
-```python
-ClusteringEvaluator(featuresCol="features_cosine",
-                    predictionCol="trajectory_cluster",
-                    metricName="silhouette",
-                    distanceMeasure="cosine")
-```
-
-The reported silhouette values (table above) are the cosine values, reported
-honestly including the fact that the curve increases to the grid edge.
-
----
-
-## Change 6 — Phenotype thresholds externalised to config; reachability justified
-
-The rule-based discontinuation phenotype thresholds (Methods §3.10) were hard-coded.
-They are now fully specified in a `phenotype:` block in
-`config/config_synthetic.yaml`:
-
-```yaml
-phenotype:
-  stable_turnover_max:   0.20
-  early_disc_low:        0.25
-  early_disc_high:       0.50
-  restart_high:          0.50
-  switch_high:           0.50
-  burden_slope_neg:     -0.10
-```
-
-The decision rule in `pipeline.py` was also **reordered** so that specific
-behaviours are tested before the generic "stable" fallbacks (high-turnover
-switching → intermittent stop-start → early drop-off → stable polypharmacy →
-persistent stable use → mixed). In the submitted ordering, switchers were
-absorbed by "persistent stable use" before the switching rule could fire, leaving
-two categories unreachable.
-
-**Reachability after the fix (6 of 7 labels populated):**
+**6 of 7 labels populated:**
 
 | Phenotype | n |
 |---|---|
@@ -188,9 +116,9 @@ ambiguous trajectories has a defined bucket.
 
 ---
 
-## Change 7 — k-sweep restored in the default config
+## k-sweep in the default config
 
-The full silhouette sweep grid is restored in `config/config_synthetic.yaml`:
+The full silhouette sweep grid is in `config/config_synthetic.yaml`:
 
 ```yaml
 clustering:
@@ -206,16 +134,11 @@ This cleanly separates the diagnostic sweep from the operational partition.
 
 ---
 
-## Scope and validity caveats (read before presenting)
+## Scope and validity caveats
 
-Two points are stated explicitly here so they cannot be mistaken for stronger
-claims than the evidence supports:
+Two points are stated explicitly here:
 
-1. **Synthetic data demonstrates capability, not real-world prevalence.** The
-   three archetypes in Change 1 were deliberately constructed so that genuinely
-   maintenance-eligible patients exhibit early discontinuation, ingredient
-   switching, and severe polypharmacy. The fact that the corresponding features
-   now fire therefore establishes *construct validity* — the pipeline correctly
+1. **Synthetic data demonstrates capability, not real-world prevalence.** the pipeline correctly
    detects these behaviours when they are present — and does **not** estimate how
    common they are in any real population. The phenotype counts in this document
    are properties of the synthetic generator, not epidemiological findings.
@@ -225,26 +148,4 @@ claims than the evidence supports:
    silhouette-optimal value sits at the grid edge. k = 4 is fixed *a priori* for
    clinical interpretability (it resolves the engineered archetypes into
    distinguishable groups), and the full sweep is reported only as a diagnostic.
-   We do not claim k = 4 is the statistically optimal partition.
-
-## Files changed
-
-- `generate_synthetic_cohort.py` — three new archetypes; prevalence rebalancing; per-era duration and switch logic.
-- `synthetic_data/CONCEPT.csv`, `synthetic_data/concept_ancestor.csv` — fifth ingredient for severe polypharmacy.
-- `src/thesis_rx/pipeline.py` — cosine silhouette evaluator; externalised phenotype thresholds; reordered decision rule; `final_k` override.
-- `config/config_synthetic.yaml` — `phenotype:` block; Tier A/B documentation; restored `k_grid` and `final_k`.
-- `silhouette_grid_standalone.py` — added `distanceMeasure="cosine"` so the standalone diagnostic matches the main-pipeline evaluator.
-- `make_plots.py` — updated the silhouette fallback table (used only when the CSV is absent) to the cosine values and corrected the accompanying comment.
-- `README.md` — corrected test-check counts (ten primary / four edge), `maintenance_min_total_days` (56) and `maintenance_single_era_min_days` (180) documentation, and added the `final_k` row.
-- `tests/test_validation_cohort.py` — added the Tier A single-era and multi-course-acute edge checks; corrected the printed assertion count.
-- `main.py`, `tests/test_validation_cohort.py` — pin `PYSPARK_PYTHON`/`PYSPARK_DRIVER_PYTHON` to `sys.executable` so Spark workers use the driver interpreter. Without this, Spark falls back to PATH `python3` (often 3.9), which crashes on the PEP 604 `X | Y` type-union syntax the pipeline uses.
-- `README.md` — corrected the minimum Python version from 3.9 to **3.10** (required by the `X | Y` syntax) and documented the `PYSPARK_PYTHON` requirement.
-
-### Known residual (intentionally not changed)
-
-The external-dataset configs (`config/config_external_eunomia.yaml`,
-`config_external_mimic.yaml`, `config_danish.yaml`) and `prepare_external_omop.py`
-retain `maintenance_min_total_days: 28`. These drive only the interoperability
-vignettes, not the headline synthetic result. They were left at 28 to remain
-consistent with any vignette numbers cited in the submitted PDF; align them to 56
-only if the vignettes are re-run and re-reported.
+   k = 4 is not claimed the statistically optimal partition.
