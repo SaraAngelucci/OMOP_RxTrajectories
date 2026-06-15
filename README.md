@@ -45,7 +45,7 @@ This project was originally designed to integrate UK Biobank OMOP prescription d
 ├── requirements.txt                     Dependency floor pins
 ├── requirements.lock                    Exact pins used for thesis reproduction
 ├── LICENSE                              MIT
-├── scripts/bootstrap_clean_repo.sh      Optional: scaffold a minimal public fork
+├── scripts/run_pipeline.py              Standalone single-config pipeline runner
 ├── src/thesis_rx/                       Core pipeline package (pipeline.py, io.py, …)
 ├── synthetic_data/CONCEPT.csv           Minimal OMOP vocabulary stub (names)
 ├── synthetic_data/concept_ancestor.csv  Identity stub (required by ``io.load_tables``)
