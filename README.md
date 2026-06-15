@@ -1,7 +1,6 @@
 # OMOP Prescription Trajectory Phenotyping Pipeline
 
-**Author:** Sara Angelucci
-**Institution:** University of Copenhagen, Faculty of Science
+**Author:** Sara Angelucci, University of Copenhagen, Faculty of Science
 **Thesis:** *Development and validation of a scalable OMOP-compatible framework for longitudinal prescription trajectory phenotyping*
 
 ---
