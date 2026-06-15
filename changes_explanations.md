@@ -1,4 +1,4 @@
-# Errata and post-submission changes
+# Post-submission changes
 
 This document records corrections and code changes made **after** the thesis PDF
 was submitted.
