@@ -75,6 +75,10 @@ synthetic_data(*/
 newfigures/
 *.png
 
+# Website assets (tracked despite the *.png rule above)
+!assets/
+!assets/*.png
+
 # Presentation material
 docs/presentation_assets/
 *.pptx

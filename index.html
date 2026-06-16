@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OMOP Prescription Trajectory Phenotyping Pipeline</title>
+<meta name="description" content="A scalable, drug-agnostic OMOP-compatible PySpark pipeline for longitudinal prescription trajectory phenotyping. Master's thesis by Sara Angelucci, University of Copenhagen.">
+<style>
+  :root {
+    --green: #2e7d4f;
+    --green-dark: #1f5538;
+    --green-light: #e8f3ec;
+    --green-accent: #3fa86a;
+    --text: #1c2b22;
+    --muted: #5a6b61;
+    --border: #d3e4d8;
+    --code-bg: #f4f9f5;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: #ffffff;
+    line-height: 1.65;
+  }
+  a { color: var(--green); }
+  a:hover { color: var(--green-dark); }
+
+  header {
+    background: linear-gradient(135deg, var(--green-dark), var(--green-accent));
+    color: #fff;
+    padding: 4rem 1.5rem 3.5rem;
+    text-align: center;
+  }
+  header h1 {
+    margin: 0 auto;
+    max-width: 900px;
+    font-size: clamp(1.7rem, 4vw, 2.6rem);
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  header .sub {
+    margin: 1rem auto 0;
+    max-width: 760px;
+    font-size: 1.05rem;
+    opacity: 0.95;
+    font-style: italic;
+  }
+  header .meta {
+    margin-top: 1.6rem;
+    font-size: 0.95rem;
+    opacity: 0.92;
+  }
+  .cta {
+    margin-top: 2rem;
+    display: flex;
+    gap: 0.8rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  nav.sections {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--green-dark);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    display: flex;
+    gap: 0.4rem 1.3rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 0.8rem 1rem;
+  }
+  nav.sections a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    opacity: 0.78;
+    padding-bottom: 2px;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.12s ease, opacity 0.12s ease;
+  }
+  nav.sections a:hover { opacity: 1; border-bottom-color: rgba(255,255,255,0.6); }
+  nav.sections a.active { opacity: 1; border-bottom-color: #fff; font-weight: 600; }
+  /* offset anchored sections so the sticky bar doesn't cover headings */
+  section { scroll-margin-top: 70px; }
+  .btn {
+    display: inline-block;
+    padding: 0.65rem 1.4rem;
+    border-radius: 999px;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .btn-primary { background: #fff; color: var(--green-dark); }
+  .btn-outline { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,0.8); }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.15); }
+
+  main {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 1.5rem 4rem;
+  }
+  section {
+    padding: 2.6rem 0 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  section:last-child { border-bottom: none; }
+  h2 {
+    color: var(--green-dark);
+    font-size: 1.5rem;
+    margin: 0 0 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  h2 .num {
+    background: var(--green-light);
+    color: var(--green);
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  h3 { color: var(--green-dark); font-size: 1.1rem; margin: 1.6rem 0 0.4rem; }
+  p { margin: 0.7rem 0; }
+  .muted { color: var(--muted); }
+
+  ol, ul { padding-left: 1.4rem; }
+  li { margin: 0.35rem 0; }
+
+  code {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    color: var(--green-dark);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--green-accent);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    margin: 0;
+  }
+  pre code { background: none; border: none; padding: 0; color: var(--text); }
+
+  /* copy-to-clipboard */
+  .codeblock { position: relative; margin: 1.2rem 0; }
+  .copy-btn {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    background: #fff;
+    color: var(--green-dark);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease, background 0.12s ease;
+  }
+  .codeblock:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--green-light); }
+  .copy-btn.copied { background: var(--green); color: #fff; border-color: var(--green); opacity: 1; }
+
+  .callout {
+    background: var(--green-light);
+    border-left: 4px solid var(--green-accent);
+    border-radius: 8px;
+    padding: 1rem 1.3rem;
+    margin: 1.4rem 0;
+  }
+  .callout strong { color: var(--green-dark); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2rem 0;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { background: var(--green-light); color: var(--green-dark); font-weight: 600; }
+  tr:hover td { background: #fafdfb; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-top: 1.4rem;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem;
+  }
+  .card h4 { margin: 0 0 0.4rem; color: var(--green-dark); font-size: 1rem; }
+  .card p { margin: 0; font-size: 0.9rem; color: var(--muted); }
+
+  /* figures */
+  figure {
+    margin: 1.6rem 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+  }
+  figure img { display: block; width: 100%; height: auto; }
+  figcaption {
+    padding: 0.7rem 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    background: var(--green-light);
+    border-top: 1px solid var(--border);
+  }
+  figcaption strong { color: var(--green-dark); }
+
+  footer {
+    background: var(--green-dark);
+    color: #d8ece0;
+    text-align: center;
+    padding: 2rem 1.5rem;
+    font-size: 0.9rem;
+  }
+  footer a { color: #fff; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>OMOP Prescription Trajectory Phenotyping Pipeline</h1>
+  <p class="sub">Development and validation of a scalable OMOP-compatible framework for longitudinal prescription trajectory phenotyping</p>
+  <p class="meta">Sara Angelucci · University of Copenhagen, Faculty of Science · Master's Thesis</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="https://github.com/SaraAngelucci/OMOP_RxTrajectories">View on GitHub</a>
+    <a class="btn btn-outline" href="#install">Get Started</a>
+  </div>
+</header>
+
+<nav class="sections">
+  <a href="#overview">Overview</a>
+  <a href="#layout">Layout</a>
+  <a href="#install">Install</a>
+  <a href="#generate">Generate Cohort</a>
+  <a href="#run">Run Pipeline</a>
+  <a href="#results">Results</a>
+  <a href="#tests">Tests</a>
+  <a href="#deploy">Deploy</a>
+  <a href="#config">Configuration</a>
+  <a href="#repro">Reproducibility</a>
+  <a href="#citation">Citation</a>
+</nav>
+
+<main>
+
+  <section id="overview">
+    <h2>Overview</h2>
+    <p>This repository contains a reproducible <strong>PySpark</strong> pipeline developed for a Master's thesis. The pipeline is <strong>drug-agnostic</strong> and operates entirely on tables defined by the Observational Medical Outcomes Partnership (OMOP) Common Data Model. It transforms raw, fragmented drug exposure records into:</p>
+    <ol>
+      <li>continuous ingredient-level <strong>drug eras</strong>;</li>
+      <li>a <strong>monthly person-time grid</strong> with active-ingredient burden, starts, stops, and Jaccard turnover;</li>
+      <li>mutually exclusive <strong>monthly prescribing states</strong> (e.g. <code>StableMono</code>, <code>StablePolypharmacy</code>, <code>HighTurnover</code>);</li>
+      <li>four temporally ordered <strong>sub-window features</strong> that preserve trajectory shape under K-means clustering;</li>
+      <li><strong>maintenance-aware discontinuation events</strong> (early drop-off, restart within 180 days, switch within 60 days);</li>
+      <li>rule-based <strong>discontinuation phenotypes</strong> and an unsupervised <strong>K-means</strong> trajectory clustering, evaluated with a <strong>stratified silhouette</strong> estimator.</li>
+    </ol>
+
+    <div class="callout">
+      <strong>Project pivot.</strong> Originally designed to integrate UK Biobank OMOP prescription data with pharmacogenomic variation, access to the secure UK Biobank Research Analysis Platform was unexpectedly revoked late in the timeline. The thesis was refocused on the <strong>methodological development and rigorous validation</strong> of the underlying phenotyping framework, executed on a Medstat-calibrated synthetic cohort. Because the pipeline reads only OMOP-standard inputs, the same code is portable to UK Biobank, NIH <em>All of Us</em>, and OMOP-mapped Danish National Registers without modification.
+    </div>
+  </section>
+
+  <section id="layout">
+    <h2>Repository layout</h2>
+    <pre><code>.
+├── config/                       YAML configurations (parameter sets)
+│   ├── config_synthetic.yaml         Primary N=1,000 cohort
+│   ├── config_synthetic_50k.yaml     Scale-up cohort
+│   ├── config_external_eunomia.yaml  OHDSI GiBleed (Tier 1)
+│   ├── config_external_synthea.yaml  Synthea27Nj vignette (Tier 2a)
+│   ├── config_external_mimic.yaml    MIMIC-IV OMOP demo (Tier 2b)
+│   └── config_danish.yaml            Danish LMDB adapter configuration
+├── generate_synthetic_cohort.py  Medstat-calibrated synthetic OMOP generator
+├── prepare_external_omop.py      Thin OMOP CDM loader / eraisation fallback
+├── main.py                       Three-experiment orchestrator
+├── make_plots.py                 Silhouette + ARI heatmap figures
+├── compute_ari_matrix.py         Standalone ARI recovery from grid parquets
+├── notebooks/                    Medstat trend + validation figures
+├── src/thesis_rx/                Core pipeline package (pipeline.py, io.py, …)
+├── synthetic_data/               Minimal OMOP vocabulary stubs
+└── tests/test_validation_cohort.py  Deterministic logic + edge-case suite</code></pre>
+  </section>
+
+  <section id="install">
+    <h2><span class="num">1</span> Install</h2>
+    <p>Python 3.9 or newer and a JVM (for PySpark) are required. Two dependency files are provided: <code>requirements.txt</code> (minimum-floor pins) and <code>requirements.lock</code> (exact pins for bit-for-bit reproducibility).</p>
+    <pre><code>python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+
+# For normal use:
+pip install -r requirements.txt
+
+# For exact reproducibility of the thesis numbers:
+pip install -r requirements.lock</code></pre>
+  </section>
+
+  <section id="generate">
+    <h2><span class="num">2</span> Generate the synthetic cohort</h2>
+    <p>The thesis results are produced on a 1,000-patient synthetic OMOP cohort whose archetype prevalences are mathematically calibrated to Danish primary-care prescribing frequencies derived from the Medstat register (then reproduced with 50,000 patients).</p>
+    <pre><code>python generate_synthetic_cohort.py --n_patients 1000 --seed 42 \
+    --output_dir data/synthetic_medstat</code></pre>
+    <p class="muted">Produces <code>synthetic_drug_era.parquet</code>, <code>synthetic_observation_period.parquet</code>, and <code>synthetic_person.parquet</code>, matching the schemas in <code>src/thesis_rx/io.py</code>.</p>
+  </section>
+
+  <section id="run">
+    <h2><span class="num">3</span> Run the full pipeline</h2>
+    <pre><code>export PYTHONPATH=$(pwd)
+python main.py</code></pre>
+    <p>Runs <strong>Experiments 1–3</strong> with <code>config/config_synthetic.yaml</code>.</p>
+    <table>
+      <thead><tr><th>Step</th><th>Behaviour</th></tr></thead>
+      <tbody>
+        <tr><td>1 · Baseline</td><td>Full stratified silhouette over <code>k ∈ {2,…,6}</code>; selects best <code>k</code>; writes baseline parquet + silhouette grid CSV.</td></tr>
+        <tr><td>2 · Negative controls</td><td>Validates <code>acute_antibiotic</code> leak rate (synthetic cohort only).</td></tr>
+        <tr><td>3 · Sensitivity grid</td><td>ARI matrix on discontinuation phenotype labels across a 3×3 (poly × maintenance-day) sweep.</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Expect minutes at N≈10³; tens of hours may apply at N≈50,000. If Experiment 3 fails with <code>SparkOutOfMemoryError</code>, increase <code>SPARK_DRIVER_MEMORY</code>.</p>
+  </section>
+
+  <section id="results">
+    <h2>Results &amp; figures</h2>
+    <p>Selected outputs from the synthetic Medstat-calibrated cohort, generated by the pipeline and its plotting scripts.</p>
+
+    <figure>
+      <img src="assets/umap.png" alt="UMAP projection of patient prescription trajectories coloured by K-means cluster">
+      <figcaption><strong>Trajectory embedding.</strong> UMAP projection of the sub-window trajectory features, coloured by K-means cluster — distinct prescribing archetypes separate in the low-dimensional space.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="assets/cluster_profiles.png" alt="Violin plots of feature distributions across discovered clusters">
+      <figcaption><strong>Cluster profiles.</strong> Distributions of the trajectory features across discovered clusters, showing how each cluster maps onto an interpretable prescribing phenotype.</figcaption>
+    </figure>
+
+    <figure>
+      <img src="assets/validation_gantt.png" alt="Gantt chart of the deterministic validation cohort drug eras">
+      <figcaption><strong>Validation cohort.</strong> Gantt chart of the hand-crafted validation cohort, where each patient encodes a clinically meaningful edge case used to confirm the pipeline's logic bit-for-bit.</figcaption>
+    </figure>
+  </section>
+
+  <section id="tests">
+    <h2><span class="num">4</span> Deterministic logic tests</h2>
+    <p>A separate suite executes the pipeline on a hand-crafted 5-patient cohort encoding every clinically meaningful edge case (stable monotherapy, escalating polypharmacy, intermittent stop-start, acute exposure, right-censoring).</p>
+    <pre><code>export PYTHONPATH=$(pwd)
+python tests/test_validation_cohort.py</code></pre>
+    <p class="muted">Expected: nine primary-cohort logic checks, three edge-case checks, and the message <code>VALIDATION COMPLETE. Pipeline is theoretically sound.</code> Optionally run under <code>pytest</code>.</p>
+  </section>
+
+  <section id="deploy">
+    <h2><span class="num">5</span> Deploying against real OMOP databases</h2>
+    <p>The pipeline is intentionally decoupled from any specific source dataset; it reads only OMOP-standard tables.</p>
+    <div class="cards">
+      <div class="card">
+        <h4>UK Biobank RAP</h4>
+        <p>Point <code>config/config.yaml</code> at the platform's OMOP tables — no code changes required. Handles <code>eid</code> → <code>person_id</code> harmonisation and British date formatting.</p>
+      </div>
+      <div class="card">
+        <h4>Danish Register (LMDB)</h4>
+        <p>For ATC-coded data, <code>danish_register_adapter.py</code> converts LMDB extracts into the same intermediate era schema.</p>
+      </div>
+      <div class="card">
+        <h4>NIH <em>All of Us</em></h4>
+        <p>OMOP CDM is canonical here. Execute by changing input paths in <code>config/config.yaml</code>; no code changes required.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="config">
+    <h2><span class="num">6</span> Configuration</h2>
+    <p>All analytic parameters are externalised in YAML and validated by <code>src.thesis_rx.config.validate_config</code>. Key parameters:</p>
+    <table>
+      <thead><tr><th>Key</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>analysis.washout_days</code></td><td>365</td><td>Pre-index observable time required for eligibility</td></tr>
+        <tr><td><code>analysis.followup_months</code></td><td>24</td><td>Length of the participant-specific monthly grid</td></tr>
+        <tr><td><code>analysis.exposure_gap_days</code></td><td>30</td><td>Era-merge gap for the sensitivity analysis</td></tr>
+        <tr><td><code>analysis.early_discontinuation_days</code></td><td>90</td><td>Max duration of a first era classified as early drop-off</td></tr>
+        <tr><td><code>analysis.restart_window_days</code></td><td>180</td><td>Window for restart events</td></tr>
+        <tr><td><code>analysis.switch_window_days</code></td><td>60</td><td>Window for switch events</td></tr>
+        <tr><td><code>analysis.polypharmacy_threshold</code></td><td>5</td><td>Concurrent ingredients defining polypharmacy</td></tr>
+        <tr><td><code>analysis.turnover_low / high</code></td><td>0.20 / 0.50</td><td>Jaccard cut-points for state classification</td></tr>
+        <tr><td><code>clustering.k_grid</code></td><td>[2,3,4,5,6]</td><td>Candidate <code>k</code> for K-means</td></tr>
+        <tr><td><code>clustering.seed</code></td><td>42</td><td>Random seed</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="repro">
+    <h2><span class="num">7</span> Reproducibility checklist</h2>
+    <ul>
+      <li>All parameters externalised in <code>config/*.yaml</code>.</li>
+      <li>All random seeds fixed (<code>numpy</code>, Python <code>random</code>, Spark KMeans seed).</li>
+      <li>All intermediate outputs persisted as Parquet under <code>cfg['project']['output_dir']</code>.</li>
+      <li>Deterministic unit-test cohort reproducible bit-for-bit.</li>
+      <li>The Medstat-calibrated synthetic generator is fully deterministic given a seed.</li>
+    </ul>
+  </section>
+
+  <section id="citation">
+    <h2>Citation &amp; Licence</h2>
+    <p>If you use this code in academic work, please cite this repository (<code>CITATION.cff</code>). The code is released for academic review and re-use under the <strong>MIT Licence</strong> — refer to <code>LICENSE</code> for full terms.</p>
+  </section>
+
+</main>
+
+<footer>
+  <p>Sara Angelucci · University of Copenhagen, Faculty of Science</p>
+  <p><a href="https://github.com/SaraAngelucci/OMOP_RxTrajectories">github.com/SaraAngelucci/OMOP_RxTrajectories</a></p>
+</footer>
+
+<script>
+  // Copy-to-clipboard buttons on every code block
+  document.querySelectorAll('main pre').forEach(function (pre) {
+    var wrap = document.createElement('div');
+    wrap.className = 'codeblock';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.type = 'button';
+    btn.textContent = 'Copy';
+    wrap.appendChild(btn);
+
+    btn.addEventListener('click', function () {
+      var text = pre.innerText;
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 1600);
+      });
+    });
+  });
+
+  // Active-section highlighting in the sticky nav
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll('nav.sections a'));
+  var linkFor = {};
+  navLinks.forEach(function (a) { linkFor[a.getAttribute('href').slice(1)] = a; });
+
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        navLinks.forEach(function (a) { a.classList.remove('active'); });
+        var link = linkFor[entry.target.id];
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
+
+  document.querySelectorAll('main section[id]').forEach(function (s) { observer.observe(s); });
+</script>
+
+</body>
+</html>
