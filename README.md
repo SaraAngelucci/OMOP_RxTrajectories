@@ -3,6 +3,8 @@
 **Author:** Sara Angelucci, University of Copenhagen, Faculty of Science
 **Thesis:** *Development and validation of a scalable OMOP-compatible framework for longitudinal prescription trajectory phenotyping*
 
+**Website:** https://saraangelucci.github.io/OMOP_RxTrajectories/
+
 ---
 
 ## Overview
